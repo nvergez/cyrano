@@ -150,6 +150,12 @@ pub fn run() {
                 // Non-fatal: app can still run without quick pane
             }
 
+            // Create the recording overlay window (hidden) - must be done on main thread
+            if let Err(e) = commands::recording_overlay::init_recording_overlay(app.handle()) {
+                log::error!("Failed to create recording overlay: {e}");
+                // Non-fatal: app can still run without recording overlay
+            }
+
             // NOTE: Application menu is built from JavaScript for i18n support
             // See src/lib/menu.ts for the menu implementation
 

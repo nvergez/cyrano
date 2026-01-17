@@ -168,6 +168,64 @@ async updateRecordingShortcut(shortcut: string | null) : Promise<Result<null, Cy
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Shows the recording overlay window without stealing focus.
+ */
+async showRecordingOverlay() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("show_recording_overlay") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Called by the frontend when the overlay has rendered.
+ * This measures actual UI render time against the show timestamp.
+ */
+async reportRecordingOverlayRendered() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("report_recording_overlay_rendered") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Dismisses the recording overlay window.
+ * On macOS, resigns key window status before hiding to avoid activating main window.
+ */
+async dismissRecordingOverlay() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("dismiss_recording_overlay") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Toggles the recording overlay window visibility.
+ */
+async toggleRecordingOverlay() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_recording_overlay") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Cancels the current recording, dismisses the overlay, and returns to idle state.
+ * This is called when the user clicks on the overlay during recording.
+ */
+async cancelRecording() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cancel_recording") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

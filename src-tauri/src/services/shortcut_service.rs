@@ -49,11 +49,12 @@ pub fn register_recording_shortcut(
     let global_shortcut = app_handle.global_shortcut();
 
     // Lock the mutex to get the current shortcut and update it atomically
-    let mut current_shortcut = CURRENT_RECORDING_SHORTCUT
-        .lock()
-        .map_err(|e| CyranoError::RecordingFailed {
-            reason: format!("Failed to lock recording shortcut mutex: {e}"),
-        })?;
+    let mut current_shortcut =
+        CURRENT_RECORDING_SHORTCUT
+            .lock()
+            .map_err(|e| CyranoError::RecordingFailed {
+                reason: format!("Failed to lock recording shortcut mutex: {e}"),
+            })?;
 
     // Unregister the old shortcut if one exists
     if let Some(old_shortcut_str) = current_shortcut.take() {
@@ -90,6 +91,13 @@ pub fn register_recording_shortcut(
 
                 if let Err(e) = app_handle_clone.emit("recording-shortcut-pressed", payload) {
                     log::error!("Failed to emit recording-shortcut-pressed event: {e}");
+                }
+
+                // Show the recording overlay when shortcut is pressed
+                if let Err(e) = crate::commands::recording_overlay::show_recording_overlay(
+                    app_handle_clone.clone(),
+                ) {
+                    log::error!("Failed to show recording overlay: {e}");
                 }
 
                 let elapsed_ms = start.elapsed().as_millis();

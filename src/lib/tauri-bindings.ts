@@ -22,7 +22,12 @@
  */
 
 export { commands, type Result } from './bindings'
-export type { AppPreferences, CyranoError, JsonValue, RecoveryError } from './bindings'
+export type {
+  AppPreferences,
+  CyranoError,
+  JsonValue,
+  RecoveryError,
+} from './bindings'
 
 /**
  * Helper to unwrap a Result type, throwing on error

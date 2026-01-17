@@ -7,4 +7,5 @@ pub mod notifications;
 pub mod preferences;
 pub mod quick_pane;
 pub mod recording;
+pub mod recording_overlay;
 pub mod recovery;

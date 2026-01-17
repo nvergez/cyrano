@@ -5,11 +5,9 @@ import App from './App'
 // Tauri bindings are mocked globally in src/test/setup.ts
 
 vi.mock('@/lib/commands', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/commands')>(
-    '@/lib/commands'
-  )
+  const actual = await vi.importActual('@/lib/commands')
   return {
-    ...actual,
+    ...(actual as object),
     initializeCommandSystem: vi.fn(),
   }
 })
@@ -25,12 +23,11 @@ describe('App', () => {
   it('renders title bar with traffic light buttons', async () => {
     render(<App />)
     // Find specifically the window control buttons in the title bar
-    const titleBarButtons = (await screen.findAllByRole('button'))
-      .filter(
-        button =>
-          button.getAttribute('aria-label')?.includes('window') ||
-          button.className.includes('window-control')
-      )
+    const titleBarButtons = (await screen.findAllByRole('button')).filter(
+      button =>
+        button.getAttribute('aria-label')?.includes('window') ||
+        button.className.includes('window-control')
+    )
     // Should have at least the window control buttons
     expect(titleBarButtons.length).toBeGreaterThan(0)
   })

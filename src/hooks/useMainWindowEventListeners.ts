@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { useCommandContext } from './use-command-context'
 import { useKeyboardShortcuts } from './use-keyboard-shortcuts'
-import { useUIStore } from '@/store/ui-store'
+import { useUIStore, type RecordingState } from '@/store/ui-store'
 import { logger } from '@/lib/logger'
 
 /**
@@ -45,6 +45,74 @@ export function useMainWindowEventListeners() {
       if (unlisten) {
         unlisten()
       }
+    }
+  }, [])
+
+  // Listen for recording overlay/state events (cross-window)
+  useEffect(() => {
+    let isMounted = true
+    const unlistenFns: (() => void)[] = []
+
+    const safeSetRecordingState = (state: string) => {
+      const normalized = state.toLowerCase() as RecordingState
+      const { setRecordingState } = useUIStore.getState()
+      setRecordingState(normalized)
+    }
+
+    listen('recording-overlay-shown', () => {
+      if (!isMounted) return
+      const { setRecordingOverlayVisible, setRecordingState } =
+        useUIStore.getState()
+      setRecordingOverlayVisible(true)
+      setRecordingState('recording')
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-overlay-shown listener', {
+          error,
+        })
+      })
+
+    listen('recording-overlay-dismissed', () => {
+      if (!isMounted) return
+      const { setRecordingOverlayVisible, setRecordingState } =
+        useUIStore.getState()
+      setRecordingOverlayVisible(false)
+      setRecordingState('idle')
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-overlay-dismissed listener', {
+          error,
+        })
+      })
+
+    listen('recording-cancelled', () => {
+      if (!isMounted) return
+      const { setRecordingOverlayVisible, setRecordingState } =
+        useUIStore.getState()
+      setRecordingOverlayVisible(false)
+      setRecordingState('idle')
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-cancelled listener', { error })
+      })
+
+    listen<{ state: string }>('recording-state-changed', event => {
+      if (!isMounted) return
+      safeSetRecordingState(event.payload.state)
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-state-changed listener', {
+          error,
+        })
+      })
+
+    return () => {
+      isMounted = false
+      unlistenFns.forEach(unlisten => unlisten())
     }
   }, [])
 }
