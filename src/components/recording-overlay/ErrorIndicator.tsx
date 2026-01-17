@@ -58,7 +58,7 @@ export function ErrorIndicator({ error }: ErrorIndicatorProps) {
             onClick={handleOpenSettings}
             className="text-left text-xs text-muted-foreground underline hover:text-foreground"
           >
-            Open Settings
+            Open System Preferences
           </button>
         )}
       </div>

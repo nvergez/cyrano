@@ -28,7 +28,7 @@ describe('ErrorIndicator', () => {
     render(<ErrorIndicator error="MicAccessDenied" />)
 
     expect(screen.getByText('Microphone access denied')).toBeInTheDocument()
-    expect(screen.getByText('Open Settings')).toBeInTheDocument()
+    expect(screen.getByText('Open System Preferences')).toBeInTheDocument()
   })
 
   it('renders generic recording failed error', () => {
@@ -38,7 +38,9 @@ describe('ErrorIndicator', () => {
 
     expect(screen.getByText('Recording failed')).toBeInTheDocument()
     // Should not show Open Settings button for generic errors
-    expect(screen.queryByText('Open Settings')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Open System Preferences')
+    ).not.toBeInTheDocument()
   })
 
   it('renders error state with null error', () => {
@@ -52,7 +54,7 @@ describe('ErrorIndicator', () => {
 
     render(<ErrorIndicator error="MicAccessDenied" />)
 
-    const settingsLink = screen.getByText('Open Settings')
+    const settingsLink = screen.getByText('Open System Preferences')
     fireEvent.click(settingsLink)
 
     expect(commands.openMicrophoneSettings).toHaveBeenCalled()

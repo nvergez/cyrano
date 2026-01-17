@@ -9,13 +9,13 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tauri::{AppHandle, Emitter};
 
 use crate::domain::{CyranoError, PermissionStatus, RecordingState};
-use crate::infrastructure::audio::cpal_adapter::TARGET_SAMPLE_RATE;
+use crate::infrastructure::audio::cpal_adapter::CpalAdapter;
 use crate::services::permission_service;
 use crate::services::recording_state;
+use crate::traits::audio_capture::AudioCapture;
 
 /// Payload for the recording-started event.
 #[derive(Clone, serde::Serialize)]
@@ -42,12 +42,10 @@ pub struct RecordingFailedPayload {
 
 /// Global recording state - holds the audio capture thread and buffer
 struct RecordingContext {
-    /// Audio samples buffer (16kHz mono f32)
-    buffer: Arc<Mutex<Vec<f32>>>,
     /// Flag to signal recording should stop
     stop_flag: Arc<AtomicBool>,
     /// Handle to the capture thread
-    capture_thread: Option<JoinHandle<Result<(), CyranoError>>>,
+    capture_thread: Option<JoinHandle<Result<Vec<f32>, CyranoError>>>,
     /// Timestamp when recording started
     start_timestamp: u64,
 }
@@ -105,21 +103,17 @@ pub fn start_recording(app: &AppHandle) -> Result<(), CyranoError> {
         return Ok(());
     }
 
-    let buffer = Arc::new(Mutex::new(Vec::new()));
     let stop_flag = Arc::new(AtomicBool::new(false));
     let start_timestamp = get_timestamp_ms();
 
-    // Clone for the capture thread
-    let buffer_clone = buffer.clone();
     let stop_flag_clone = stop_flag.clone();
 
     // Spawn audio capture thread
-    let capture_thread = thread::spawn(move || -> Result<(), CyranoError> {
-        run_audio_capture(buffer_clone, stop_flag_clone)
+    let capture_thread = thread::spawn(move || -> Result<Vec<f32>, CyranoError> {
+        run_audio_capture(stop_flag_clone)
     });
 
     *ctx_guard = Some(RecordingContext {
-        buffer,
         stop_flag,
         capture_thread: Some(capture_thread),
         start_timestamp,
@@ -170,22 +164,23 @@ pub fn stop_recording(app: &AppHandle) -> Result<RecordingStoppedPayload, Cyrano
     ctx.stop_flag.store(true, Ordering::SeqCst);
 
     // Wait for the capture thread to finish
-    if let Some(handle) = ctx.capture_thread {
+    let samples = if let Some(handle) = ctx.capture_thread {
         match handle.join() {
-            Ok(Ok(())) => log::debug!("Audio capture thread finished successfully"),
-            Ok(Err(e)) => log::warn!("Audio capture thread returned error: {e}"),
-            Err(_) => log::error!("Audio capture thread panicked"),
+            Ok(Ok(samples)) => {
+                log::debug!("Audio capture thread finished successfully");
+                samples
+            }
+            Ok(Err(e)) => {
+                log::warn!("Audio capture thread returned error: {e}");
+                Vec::new()
+            }
+            Err(_) => {
+                log::error!("Audio capture thread panicked");
+                Vec::new()
+            }
         }
-    }
-
-    // Get the captured samples
-    let samples = match ctx.buffer.lock() {
-        Ok(buf) => buf.clone(),
-        Err(e) => {
-            return Err(CyranoError::RecordingFailed {
-                reason: format!("Failed to lock buffer: {e}"),
-            });
-        }
+    } else {
+        Vec::new()
     };
 
     // Store samples in the global audio buffer for later use
@@ -220,10 +215,8 @@ pub fn stop_recording(app: &AppHandle) -> Result<RecordingStoppedPayload, Cyrano
 
 /// Store audio samples in the global buffer for transcription.
 fn store_audio_samples(samples: &[f32]) -> Result<(), CyranoError> {
-    // Use the existing audio buffer from recording_state
-    // Note: We're storing samples here for future transcription in Story 2.x
-    let _ = samples; // Placeholder - actual storage will be done via recording_state
-    Ok(())
+    recording_state::set_audio_samples(samples)
+        .map_err(|e| CyranoError::RecordingFailed { reason: e })
 }
 
 /// Cancel the current recording, discarding all captured audio.
@@ -254,22 +247,30 @@ pub fn cancel_recording() -> usize {
     ctx.stop_flag.store(true, Ordering::SeqCst);
 
     // Wait for the capture thread to finish
-    if let Some(handle) = ctx.capture_thread {
+    let sample_count = if let Some(handle) = ctx.capture_thread {
         match handle.join() {
-            Ok(Ok(())) => log::debug!("Audio capture thread finished on cancel"),
-            Ok(Err(e)) => log::warn!("Audio capture thread error on cancel: {e}"),
-            Err(_) => log::error!("Audio capture thread panicked on cancel"),
+            Ok(Ok(samples)) => {
+                log::debug!("Audio capture thread finished on cancel");
+                samples.len()
+            }
+            Ok(Err(e)) => {
+                log::warn!("Audio capture thread error on cancel: {e}");
+                0
+            }
+            Err(_) => {
+                log::error!("Audio capture thread panicked on cancel");
+                0
+            }
         }
-    }
-
-    // Get the sample count before discarding
-    let sample_count = match ctx.buffer.lock() {
-        Ok(buf) => buf.len(),
-        Err(_) => 0,
+    } else {
+        0
     };
 
     // Update state back to idle
     recording_state::set_recording_state(RecordingState::Idle);
+    if let Err(e) = recording_state::clear_audio_buffer() {
+        log::warn!("Failed to clear audio buffer on cancel: {e}");
+    }
 
     log::info!("Recording cancelled, discarded {} samples", sample_count);
     sample_count
@@ -279,119 +280,9 @@ pub fn cancel_recording() -> usize {
 ///
 /// This function handles the actual cpal audio capture, running until
 /// the stop_flag is set to true.
-fn run_audio_capture(
-    buffer: Arc<Mutex<Vec<f32>>>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), CyranoError> {
-    let host = cpal::default_host();
-
-    let device = host
-        .default_input_device()
-        .ok_or(CyranoError::MicAccessDenied)?;
-
-    log::debug!("Using input device: {:?}", device.name());
-
-    // Get a supported config
-    let config = get_input_config(&device)?;
-    let device_sample_rate = config.sample_rate().0;
-    let channels = config.channels() as usize;
-    let sample_format = config.sample_format();
-
-    log::info!(
-        "Audio config: {}Hz, {} channels, {:?}",
-        device_sample_rate,
-        channels,
-        sample_format
-    );
-
-    // Calculate decimation factor for downsampling to 16kHz
-    let decimation_factor = if device_sample_rate > TARGET_SAMPLE_RATE {
-        device_sample_rate / TARGET_SAMPLE_RATE
-    } else {
-        1
-    };
-
-    log::debug!(
-        "Decimation factor: {} (device: {}Hz -> target: {}Hz)",
-        decimation_factor,
-        device_sample_rate,
-        TARGET_SAMPLE_RATE
-    );
-
-    // Track if we've received any audio callbacks (for debugging)
-    let first_callback_logged = Arc::new(AtomicBool::new(false));
-
-    let err_callback = |err| log::error!("Audio stream error: {err}");
-
-    let stream = match sample_format {
-        cpal::SampleFormat::F32 => {
-            let buffer_clone = buffer.clone();
-            let stop_flag_clone = stop_flag.clone();
-            let first_logged = first_callback_logged.clone();
-            let data_callback = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                // Log first callback to confirm audio is flowing
-                if !first_logged.swap(true, Ordering::SeqCst) {
-                    log::info!(
-                        "First F32 audio callback: {} raw samples, {} channels",
-                        data.len(),
-                        channels
-                    );
-                }
-                if stop_flag_clone.load(Ordering::SeqCst) {
-                    return;
-                }
-                if let Ok(mut buf) = buffer_clone.lock() {
-                    for (i, chunk) in data.chunks(channels).enumerate() {
-                        if i % decimation_factor as usize == 0 {
-                            let sample: f32 = chunk.iter().sum::<f32>() / chunk.len() as f32;
-                            buf.push(sample);
-                        }
-                    }
-                }
-            };
-            device
-                .build_input_stream(&config.into(), data_callback, err_callback, None)
-                .map_err(CyranoError::from)?
-        }
-        cpal::SampleFormat::I16 => {
-            let buffer_clone = buffer.clone();
-            let stop_flag_clone = stop_flag.clone();
-            let first_logged = first_callback_logged.clone();
-            let data_callback = move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                // Log first callback to confirm audio is flowing
-                if !first_logged.swap(true, Ordering::SeqCst) {
-                    log::info!(
-                        "First I16 audio callback: {} raw samples, {} channels",
-                        data.len(),
-                        channels
-                    );
-                }
-                if stop_flag_clone.load(Ordering::SeqCst) {
-                    return;
-                }
-                if let Ok(mut buf) = buffer_clone.lock() {
-                    for (i, chunk) in data.chunks(channels).enumerate() {
-                        if i % decimation_factor as usize == 0 {
-                            let sample: f32 = chunk.iter().map(|&s| s as f32).sum::<f32>()
-                                / chunk.len() as f32
-                                / 32768.0;
-                            buf.push(sample);
-                        }
-                    }
-                }
-            };
-            device
-                .build_input_stream(&config.into(), data_callback, err_callback, None)
-                .map_err(CyranoError::from)?
-        }
-        _ => {
-            return Err(CyranoError::RecordingFailed {
-                reason: format!("Unsupported sample format: {:?}", sample_format),
-            });
-        }
-    };
-
-    stream.play().map_err(CyranoError::from)?;
+fn run_audio_capture(stop_flag: Arc<AtomicBool>) -> Result<Vec<f32>, CyranoError> {
+    let mut capture: Box<dyn AudioCapture> = Box::new(CpalAdapter::new());
+    capture.start_capture()?;
 
     log::info!("Audio capture started in dedicated thread");
 
@@ -401,61 +292,7 @@ fn run_audio_capture(
     }
 
     log::info!("Audio capture stopping");
-    // Stream is dropped here, stopping capture
-    Ok(())
-}
-
-/// Get a suitable input configuration for the device.
-fn get_input_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig, CyranoError> {
-    let supported_configs: Vec<_> = device
-        .supported_input_configs()
-        .map_err(|e| match e {
-            cpal::SupportedStreamConfigsError::DeviceNotAvailable => CyranoError::MicAccessDenied,
-            _ => CyranoError::RecordingFailed {
-                reason: format!("Failed to get supported configs: {e}"),
-            },
-        })?
-        .collect();
-
-    if supported_configs.is_empty() {
-        return Err(CyranoError::RecordingFailed {
-            reason: "No supported audio configurations found".to_string(),
-        });
-    }
-
-    // Prefer F32 format
-    for config in &supported_configs {
-        if config.sample_format() == cpal::SampleFormat::F32 {
-            if config.min_sample_rate().0 <= TARGET_SAMPLE_RATE
-                && config.max_sample_rate().0 >= TARGET_SAMPLE_RATE
-            {
-                return Ok((*config).with_sample_rate(cpal::SampleRate(TARGET_SAMPLE_RATE)));
-            }
-            return Ok((*config).with_max_sample_rate());
-        }
-    }
-
-    // Fall back to I16
-    for config in &supported_configs {
-        if config.sample_format() == cpal::SampleFormat::I16 {
-            if config.min_sample_rate().0 <= TARGET_SAMPLE_RATE
-                && config.max_sample_rate().0 >= TARGET_SAMPLE_RATE
-            {
-                return Ok((*config).with_sample_rate(cpal::SampleRate(TARGET_SAMPLE_RATE)));
-            }
-            return Ok((*config).with_max_sample_rate());
-        }
-    }
-
-    // Use first available config
-    let config = &supported_configs[0];
-    if config.min_sample_rate().0 <= TARGET_SAMPLE_RATE
-        && config.max_sample_rate().0 >= TARGET_SAMPLE_RATE
-    {
-        Ok((*config).with_sample_rate(cpal::SampleRate(TARGET_SAMPLE_RATE)))
-    } else {
-        Ok((*config).with_max_sample_rate())
-    }
+    capture.stop_capture()
 }
 
 #[cfg(test)]
@@ -488,5 +325,43 @@ mod tests {
         let json = serde_json::to_string(&payload).expect("Should serialize");
         assert!(json.contains("5000"));
         assert!(json.contains("80000"));
+    }
+
+    #[test]
+    fn test_store_audio_samples_writes_to_buffer() {
+        let samples = vec![0.1_f32, 0.2_f32, 0.3_f32];
+        store_audio_samples(&samples).expect("store_audio_samples should succeed");
+        let stored =
+            recording_state::take_audio_samples().expect("take_audio_samples should succeed");
+        assert_eq!(stored, samples);
+    }
+
+    #[test]
+    fn test_cancel_recording_resets_state() {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_flag_clone = stop_flag.clone();
+
+        let handle = thread::spawn(move || {
+            while !stop_flag_clone.load(Ordering::SeqCst) {
+                thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Ok(vec![0.0_f32; 10])
+        });
+
+        let ctx = RecordingContext {
+            stop_flag,
+            capture_thread: Some(handle),
+            start_timestamp: 0,
+        };
+
+        *recording_context()
+            .lock()
+            .expect("recording context lock should succeed") = Some(ctx);
+
+        recording_state::set_recording_state(RecordingState::Recording);
+        let discarded = cancel_recording();
+
+        assert_eq!(discarded, 10);
+        assert_eq!(recording_state::get_recording_state(), RecordingState::Idle);
     }
 }
