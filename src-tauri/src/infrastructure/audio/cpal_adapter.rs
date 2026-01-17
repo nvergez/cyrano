@@ -14,14 +14,12 @@ use crate::traits::audio_capture::AudioCapture;
 pub const TARGET_SAMPLE_RATE: u32 = 16_000;
 
 /// cpal-backed audio capture adapter.
-#[allow(dead_code)]
 pub struct CpalAdapter {
     buffer: Arc<Mutex<Vec<f32>>>,
     stream: Option<cpal::Stream>,
     is_capturing: bool,
 }
 
-#[allow(dead_code)]
 impl CpalAdapter {
     /// Create a new adapter with an empty buffer.
     pub fn new() -> Self {
