@@ -52,7 +52,7 @@
     "copyright": "Copyright © 2026 Nicolas. All rights reserved.",
     "macOS": {
       "frameworks": [],
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "13.0",
       "signingIdentity": "-",
       "providerShortName": null,
       "entitlements": null,
@@ -61,12 +61,10 @@
   },
   "plugins": {
     "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest/download/latest.json"
-      ],
+      "active": false,
+      "endpoints": [],
       "dialog": true,
-      "pubkey": "YOUR_UPDATER_PUBLIC_KEY_HERE"
+      "pubkey": ""
     }
   }
 }
