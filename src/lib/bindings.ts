@@ -142,6 +142,32 @@ async updateQuickPaneShortcut(shortcut: string | null) : Promise<Result<null, st
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Returns the default recording shortcut constant for frontend use.
+ */
+async getDefaultRecordingShortcut() : Promise<string> {
+    return await TAURI_INVOKE("get_default_recording_shortcut");
+},
+/**
+ * Updates the global shortcut for recording.
+ * Pass None to reset to default.
+ * 
+ * # Arguments
+ * * `app` - The Tauri application handle
+ * * `shortcut` - The new shortcut string, or None to use default
+ * 
+ * # Returns
+ * * `Ok(())` if the shortcut was updated successfully
+ * * `Err(String)` if the update failed
+ */
+async updateRecordingShortcut(shortcut: string | null) : Promise<Result<null, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_recording_shortcut", { shortcut }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -166,10 +192,39 @@ export type AppPreferences = { theme: string;
  */
 quick_pane_shortcut: string | null; 
 /**
+ * Global shortcut for recording (e.g., "CommandOrControl+Shift+Space")
+ * If None, uses the default shortcut
+ */
+recording_shortcut: string | null; 
+/**
  * User's preferred language (e.g., "en", "es", "de")
  * If None, uses system locale detection
  */
 language: string | null }
+/**
+ * Unified error type for all Cyrano operations.
+ */
+export type CyranoError = 
+/**
+ * User has not granted microphone access permission.
+ */
+"MicAccessDenied" | 
+/**
+ * The Whisper model file was not found at the expected location.
+ */
+{ ModelNotFound: { path: string } } | 
+/**
+ * Failed to load the Whisper model into memory.
+ */
+{ ModelLoadFailed: { reason: string } } | 
+/**
+ * The transcription process failed.
+ */
+{ TranscriptionFailed: { reason: string } } | 
+/**
+ * Audio recording failed.
+ */
+{ RecordingFailed: { reason: string } }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * Error types for recovery operations (typed for frontend matching)

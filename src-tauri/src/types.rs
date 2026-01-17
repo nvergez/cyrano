@@ -30,6 +30,9 @@ pub struct AppPreferences {
     /// Global shortcut for quick pane (e.g., "CommandOrControl+Shift+.")
     /// If None, uses the default shortcut
     pub quick_pane_shortcut: Option<String>,
+    /// Global shortcut for recording (e.g., "CommandOrControl+Shift+Space")
+    /// If None, uses the default shortcut
+    pub recording_shortcut: Option<String>,
     /// User's preferred language (e.g., "en", "es", "de")
     /// If None, uses system locale detection
     pub language: Option<String>,
@@ -40,6 +43,7 @@ impl Default for AppPreferences {
         Self {
             theme: "system".to_string(),
             quick_pane_shortcut: None, // None means use default
+            recording_shortcut: None,  // None means use default
             language: None,            // None means use system locale
         }
     }

@@ -1,10 +1,11 @@
 //! Application error types.
 
 use serde::Serialize;
+use specta::Type;
 use thiserror::Error;
 
 /// Unified error type for all Cyrano operations.
-#[derive(Debug, Clone, Serialize, Error)]
+#[derive(Debug, Clone, Serialize, Type, Error)]
 pub enum CyranoError {
     /// User has not granted microphone access permission.
     #[error("Microphone access denied")]
@@ -58,7 +59,10 @@ mod tests {
         let err = CyranoError::TranscriptionFailed {
             reason: "invalid audio format".to_string(),
         };
-        assert_eq!(err.to_string(), "Transcription failed: invalid audio format");
+        assert_eq!(
+            err.to_string(),
+            "Transcription failed: invalid audio format"
+        );
     }
 
     #[test]

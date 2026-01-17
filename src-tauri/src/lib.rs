@@ -127,6 +127,23 @@ pub fn run() {
                 )?;
             }
 
+            // Load saved preferences and register the recording shortcut
+            #[cfg(desktop)]
+            {
+                use services::shortcut_service::DEFAULT_RECORDING_SHORTCUT;
+
+                let saved_shortcut = commands::preferences::load_recording_shortcut(app.handle());
+                let shortcut_to_register = saved_shortcut
+                    .as_deref()
+                    .unwrap_or(DEFAULT_RECORDING_SHORTCUT);
+
+                log::info!("Registering recording shortcut: {shortcut_to_register}");
+                services::shortcut_service::register_recording_shortcut(
+                    app.handle(),
+                    shortcut_to_register,
+                )?;
+            }
+
             // Create the quick pane window (hidden) - must be done on main thread
             if let Err(e) = commands::quick_pane::init_quick_pane(app.handle()) {
                 log::error!("Failed to create quick pane: {e}");

@@ -1,22 +1,31 @@
 import { render, screen } from '@/test/test-utils'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import App from './App'
 
 // Tauri bindings are mocked globally in src/test/setup.ts
 
+vi.mock('@/lib/commands', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/commands')>(
+    '@/lib/commands'
+  )
+  return {
+    ...actual,
+    initializeCommandSystem: vi.fn(),
+  }
+})
+
 describe('App', () => {
-  it('renders main window layout', () => {
+  it('renders main window layout', async () => {
     render(<App />)
     expect(
-      screen.getByRole('heading', { name: /hello world/i })
+      await screen.findByRole('heading', { name: /hello world/i })
     ).toBeInTheDocument()
   })
 
-  it('renders title bar with traffic light buttons', () => {
+  it('renders title bar with traffic light buttons', async () => {
     render(<App />)
     // Find specifically the window control buttons in the title bar
-    const titleBarButtons = screen
-      .getAllByRole('button')
+    const titleBarButtons = (await screen.findAllByRole('button'))
       .filter(
         button =>
           button.getAttribute('aria-label')?.includes('window') ||
