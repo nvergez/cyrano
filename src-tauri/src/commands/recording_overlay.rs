@@ -9,7 +9,7 @@ use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl};
 
 use crate::domain::RecordingState;
-use crate::services::recording_state;
+use crate::services::{recording_service, recording_state};
 
 // ============================================================================
 // Constants
@@ -414,8 +414,8 @@ pub fn cancel_recording(app: AppHandle) -> Result<(), String> {
     // Dismiss the overlay first
     dismiss_recording_overlay(app.clone())?;
 
-    let cleared_samples = recording_state::cancel_recording();
-    log::info!("Cleared {cleared_samples} audio samples on cancel");
+    let cleared_samples = recording_service::cancel_recording();
+    log::info!("Cancelled recording, discarded {cleared_samples} audio samples");
 
     // Emit recording-cancelled event for state management
     if let Err(e) = app.emit("recording-cancelled", ()) {
@@ -423,6 +423,30 @@ pub fn cancel_recording(app: AppHandle) -> Result<(), String> {
     }
 
     log::info!("Recording cancelled, state returned to idle");
+    Ok(())
+}
+
+/// Opens the macOS System Preferences to the Privacy > Microphone settings.
+/// This is useful when the user denies microphone permission and needs to grant it.
+#[tauri::command]
+#[specta::specta]
+pub fn open_microphone_settings(_app: AppHandle) -> Result<(), String> {
+    log::info!("Opening microphone settings");
+
+    // macOS deep link to Privacy > Microphone
+    #[cfg(target_os = "macos")]
+    {
+        let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+        tauri_plugin_opener::open_url(url, None::<&str>)
+            .map_err(|e| format!("Failed to open microphone settings: {e}"))?;
+        log::info!("Opened microphone settings");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        log::warn!("Opening microphone settings is only supported on macOS");
+    }
+
     Ok(())
 }
 

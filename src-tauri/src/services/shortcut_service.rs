@@ -93,11 +93,35 @@ pub fn register_recording_shortcut(
                     log::error!("Failed to emit recording-shortcut-pressed event: {e}");
                 }
 
-                // Show the recording overlay when shortcut is pressed
-                if let Err(e) = crate::commands::recording_overlay::show_recording_overlay(
-                    app_handle_clone.clone(),
-                ) {
-                    log::error!("Failed to show recording overlay: {e}");
+                // Start recording (this will check permission and emit events)
+                // Note: Toggle behavior (stop on second press) will be added in Story 1.5
+                match crate::services::recording_service::start_recording(&app_handle_clone) {
+                    Ok(()) => {
+                        log::info!("Recording started successfully");
+                        // Show the recording overlay when recording starts
+                        if let Err(e) = crate::commands::recording_overlay::show_recording_overlay(
+                            app_handle_clone.clone(),
+                        ) {
+                            log::error!("Failed to show recording overlay: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to start recording: {e}");
+                        // Show overlay first so it can receive the error event
+                        if let Err(overlay_err) =
+                            crate::commands::recording_overlay::show_recording_overlay(
+                                app_handle_clone.clone(),
+                            )
+                        {
+                            log::error!("Failed to show recording overlay: {overlay_err}");
+                        }
+                        // Now emit the recording-failed event so the overlay displays error state
+                        let payload =
+                            crate::services::recording_service::RecordingFailedPayload { error: e };
+                        if let Err(emit_err) = app_handle_clone.emit("recording-failed", payload) {
+                            log::error!("Failed to emit recording-failed event: {emit_err}");
+                        }
+                    }
                 }
 
                 let elapsed_ms = start.elapsed().as_millis();

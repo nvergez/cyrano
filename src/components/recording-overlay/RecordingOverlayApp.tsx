@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { commands } from '@/lib/tauri-bindings'
+import { commands, type CyranoError } from '@/lib/tauri-bindings'
 import { logger } from '@/lib/logger'
+import { useUIStore } from '@/store/ui-store'
 import { RecordingOverlay } from './RecordingOverlay'
 
 /**
@@ -77,6 +78,54 @@ export default function RecordingOverlayApp() {
 
     return () => {
       unlisten.then(fn => fn())
+    }
+  }, [])
+
+  // Listen for recording events to update overlay state
+  // Note: The overlay window has its own Zustand store instance,
+  // so we need to listen for events directly here
+  useEffect(() => {
+    const unlisteners: (() => void)[] = []
+
+    // Listen for recording-failed to show error state
+    listen<{ error: CyranoError }>('recording-failed', event => {
+      logger.info('Recording overlay received recording-failed event', {
+        error: event.payload.error,
+      })
+      const { setRecordingError } = useUIStore.getState()
+      setRecordingError(event.payload.error)
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-failed listener in overlay', {
+          error,
+        })
+      })
+
+    // Listen for recording-state-changed to update state
+    listen<{ state: string }>('recording-state-changed', event => {
+      const { setRecordingState } = useUIStore.getState()
+      setRecordingState(
+        event.payload.state.toLowerCase() as
+          | 'idle'
+          | 'recording'
+          | 'transcribing'
+          | 'done'
+          | 'error'
+      )
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error(
+          'Failed to setup recording-state-changed listener in overlay',
+          {
+            error,
+          }
+        )
+      })
+
+    return () => {
+      unlisteners.forEach(unlisten => unlisten())
     }
   }, [])
 

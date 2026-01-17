@@ -170,6 +170,71 @@ async updateRecordingShortcut(shortcut: string | null) : Promise<Result<null, Cy
 }
 },
 /**
+ * Starts audio recording from the microphone.
+ * 
+ * # Arguments
+ * * `app` - The Tauri application handle
+ * 
+ * # Returns
+ * * `Ok(())` if recording started successfully
+ * * `Err(CyranoError::MicAccessDenied)` if microphone permission is denied
+ * * `Err(CyranoError::RecordingFailed)` for other errors
+ */
+async startRecording() : Promise<Result<null, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_recording") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops audio recording and returns the recording information.
+ * 
+ * # Arguments
+ * * `app` - The Tauri application handle
+ * 
+ * # Returns
+ * * `Ok(RecordingStoppedPayload)` with duration and sample count
+ * * `Err(CyranoError::RecordingFailed)` if no recording was in progress
+ */
+async stopRecording() : Promise<Result<RecordingStoppedPayload, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_recording") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Checks the current microphone permission status.
+ * 
+ * # Returns
+ * * `PermissionStatus::Granted` if permission is granted
+ * * `PermissionStatus::Denied` if permission is denied
+ * * `PermissionStatus::NotDetermined` if not yet requested
+ */
+async checkMicrophonePermission() : Promise<PermissionStatus> {
+    return await TAURI_INVOKE("check_microphone_permission");
+},
+/**
+ * Requests microphone permission from the user.
+ * 
+ * On macOS, this triggers the system permission dialog if not previously requested.
+ * 
+ * # Returns
+ * * `Ok(true)` if permission was granted
+ * * `Err(CyranoError::MicAccessDenied)` if permission was denied
+ */
+async requestMicrophonePermission() : Promise<Result<boolean, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("request_microphone_permission") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Shows the recording overlay window without stealing focus.
  */
 async showRecordingOverlay() : Promise<Result<null, string>> {
@@ -222,6 +287,18 @@ async toggleRecordingOverlay() : Promise<Result<null, string>> {
 async cancelRecording() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("cancel_recording") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the macOS System Preferences to the Privacy > Microphone settings.
+ * This is useful when the user denies microphone permission and needs to grant it.
+ */
+async openMicrophoneSettings() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_microphone_settings") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -284,6 +361,34 @@ export type CyranoError =
  */
 { RecordingFailed: { reason: string } }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+/**
+ * Represents the microphone permission status on macOS.
+ */
+export type PermissionStatus = 
+/**
+ * Permission has been granted by the user.
+ */
+"Granted" | 
+/**
+ * Permission has been explicitly denied by the user.
+ */
+"Denied" | 
+/**
+ * Permission has not yet been requested (first launch).
+ */
+"NotDetermined"
+/**
+ * Payload for the recording-stopped event.
+ */
+export type RecordingStoppedPayload = { 
+/**
+ * Duration of the recording in milliseconds (max ~49 days)
+ */
+duration_ms: number; 
+/**
+ * Number of audio samples captured
+ */
+sample_count: number }
 /**
  * Error types for recovery operations (typed for frontend matching)
  */

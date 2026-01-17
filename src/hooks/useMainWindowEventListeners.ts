@@ -4,6 +4,23 @@ import { useCommandContext } from './use-command-context'
 import { useKeyboardShortcuts } from './use-keyboard-shortcuts'
 import { useUIStore, type RecordingState } from '@/store/ui-store'
 import { logger } from '@/lib/logger'
+import type { CyranoError } from '@/lib/tauri-bindings'
+
+/** Payload for recording-started event */
+interface RecordingStartedPayload {
+  timestamp: number
+}
+
+/** Payload for recording-stopped event */
+interface RecordingStoppedPayload {
+  duration_ms: number
+  sample_count: number
+}
+
+/** Payload for recording-failed event */
+interface RecordingFailedPayload {
+  error: CyranoError
+}
 
 /**
  * Main window event listeners - handles global keyboard shortcuts and cross-window events.
@@ -108,6 +125,48 @@ export function useMainWindowEventListeners() {
         logger.error('Failed to setup recording-state-changed listener', {
           error,
         })
+      })
+
+    // Listen for recording-started event
+    listen<RecordingStartedPayload>('recording-started', event => {
+      if (!isMounted) return
+      logger.info('Recording started', { timestamp: event.payload.timestamp })
+      const { setRecordingState, clearRecordingError } = useUIStore.getState()
+      clearRecordingError()
+      setRecordingState('recording')
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-started listener', { error })
+      })
+
+    // Listen for recording-stopped event
+    listen<RecordingStoppedPayload>('recording-stopped', event => {
+      if (!isMounted) return
+      logger.info('Recording stopped', {
+        durationMs: event.payload.duration_ms,
+        sampleCount: event.payload.sample_count,
+      })
+      const { setRecordingState } = useUIStore.getState()
+      setRecordingState('transcribing')
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-stopped listener', { error })
+      })
+
+    // Listen for recording-failed event
+    listen<RecordingFailedPayload>('recording-failed', event => {
+      if (!isMounted) return
+      logger.error('Recording failed', { error: event.payload.error })
+      const { setRecordingError, setRecordingOverlayVisible } =
+        useUIStore.getState()
+      setRecordingError(event.payload.error)
+      setRecordingOverlayVisible(true)
+    })
+      .then(unlisten => unlistenFns.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-failed listener', { error })
       })
 
     return () => {

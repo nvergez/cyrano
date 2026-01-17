@@ -26,6 +26,8 @@ export type {
   AppPreferences,
   CyranoError,
   JsonValue,
+  PermissionStatus,
+  RecordingStoppedPayload,
   RecoveryError,
 } from './bindings'
 

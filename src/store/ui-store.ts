@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 
+import type { CyranoError } from '@/lib/tauri-bindings'
+
 /** Recording workflow states (mirrors Rust RecordingState enum) */
 export type RecordingState =
   | 'idle'
@@ -17,6 +19,7 @@ interface UIState {
   lastQuickPaneEntry: string | null
   recordingOverlayVisible: boolean
   recordingState: RecordingState
+  recordingError: CyranoError | null
 
   toggleLeftSidebar: () => void
   setLeftSidebarVisible: (visible: boolean) => void
@@ -29,6 +32,8 @@ interface UIState {
   setLastQuickPaneEntry: (text: string) => void
   setRecordingOverlayVisible: (visible: boolean) => void
   setRecordingState: (state: RecordingState) => void
+  setRecordingError: (error: CyranoError | null) => void
+  clearRecordingError: () => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -41,6 +46,7 @@ export const useUIStore = create<UIState>()(
       lastQuickPaneEntry: null,
       recordingOverlayVisible: false,
       recordingState: 'idle' as RecordingState,
+      recordingError: null,
 
       toggleLeftSidebar: () =>
         set(
@@ -102,6 +108,16 @@ export const useUIStore = create<UIState>()(
 
       setRecordingState: state =>
         set({ recordingState: state }, undefined, 'setRecordingState'),
+
+      setRecordingError: error =>
+        set(
+          { recordingError: error, recordingState: 'error' },
+          undefined,
+          'setRecordingError'
+        ),
+
+      clearRecordingError: () =>
+        set({ recordingError: null }, undefined, 'clearRecordingError'),
     }),
     {
       name: 'ui-store',

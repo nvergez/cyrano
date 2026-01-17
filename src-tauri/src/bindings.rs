@@ -20,11 +20,16 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         quick_pane::update_quick_pane_shortcut,
         recording::get_default_recording_shortcut,
         recording::update_recording_shortcut,
+        recording::start_recording,
+        recording::stop_recording,
+        recording::check_microphone_permission,
+        recording::request_microphone_permission,
         recording_overlay::show_recording_overlay,
         recording_overlay::report_recording_overlay_rendered,
         recording_overlay::dismiss_recording_overlay,
         recording_overlay::toggle_recording_overlay,
         recording_overlay::cancel_recording,
+        recording_overlay::open_microphone_settings,
     ])
 }
 

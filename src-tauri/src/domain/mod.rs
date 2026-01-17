@@ -10,4 +10,4 @@ mod error;
 mod state;
 
 pub use error::CyranoError;
-pub use state::RecordingState;
+pub use state::{PermissionStatus, RecordingState};

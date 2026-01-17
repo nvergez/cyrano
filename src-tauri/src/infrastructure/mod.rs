@@ -4,3 +4,5 @@
 //! - Audio capture (cpal)
 //! - Speech-to-text (whisper-rs)
 //! - macOS accessibility APIs
+
+pub mod audio;
