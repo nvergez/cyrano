@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { RecordingOverlay } from './RecordingOverlay'
 import { useUIStore } from '@/store/ui-store'
 
@@ -76,5 +76,32 @@ describe('RecordingOverlay', () => {
 
     const svg = document.querySelector('svg')
     expect(svg).toHaveClass('animate-spin')
+  })
+
+  it('renders success indicator when state is done', () => {
+    useUIStore.setState({ recordingState: 'done' })
+    render(<RecordingOverlay />)
+
+    expect(screen.getByText('Done')).toBeInTheDocument()
+  })
+
+  it('shows green checkmark icon in done state', () => {
+    useUIStore.setState({ recordingState: 'done' })
+    render(<RecordingOverlay />)
+
+    const svg = document.querySelector('svg')
+    expect(svg).toBeInTheDocument()
+    expect(svg).toHaveClass('text-green-500')
+  })
+
+  it('calls dismissRecordingOverlay when clicking in done state', async () => {
+    const { commands } = await import('@/lib/tauri-bindings')
+    useUIStore.setState({ recordingState: 'done' })
+    const { container } = render(<RecordingOverlay />)
+
+    const overlay = container.firstChild as HTMLElement
+    fireEvent.click(overlay)
+
+    expect(commands.dismissRecordingOverlay).toHaveBeenCalled()
   })
 })

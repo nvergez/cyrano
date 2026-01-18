@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { useUIStore } from '@/store/ui-store'
 import { RecordingIndicator } from './RecordingIndicator'
 import { ErrorIndicator } from './ErrorIndicator'
+import { SuccessIndicator } from './SuccessIndicator'
 import { TranscribingIndicator } from './TranscribingIndicator'
 
 /**
@@ -63,6 +64,9 @@ export function RecordingOverlay() {
   const renderIndicator = () => {
     if (isError) {
       return <ErrorIndicator error={recordingError} />
+    }
+    if (recordingState === 'done') {
+      return <SuccessIndicator />
     }
     if (recordingState === 'transcribing') {
       return <TranscribingIndicator />

@@ -50,6 +50,13 @@ function parseError(error: CyranoError | null): {
         details: error.TranscriptionFailed.reason,
       }
     }
+    if ('ClipboardFailed' in error) {
+      return {
+        type: 'other',
+        message: 'Clipboard error',
+        details: error.ClipboardFailed.reason,
+      }
+    }
   }
 
   return { type: 'other', message: 'Recording failed' }

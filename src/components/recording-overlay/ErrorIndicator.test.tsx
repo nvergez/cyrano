@@ -126,4 +126,20 @@ describe('ErrorIndicator', () => {
       screen.queryByText('Open System Preferences')
     ).not.toBeInTheDocument()
   })
+
+  it('renders ClipboardFailed error correctly', () => {
+    render(
+      <ErrorIndicator
+        error={{ ClipboardFailed: { reason: 'clipboard access denied' } }}
+      />
+    )
+
+    expect(screen.getByText('Clipboard error')).toBeInTheDocument()
+    expect(screen.getByText('clipboard access denied')).toBeInTheDocument()
+    // No special action link for clipboard errors
+    expect(screen.queryByText('Open Model Directory')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Open System Preferences')
+    ).not.toBeInTheDocument()
+  })
 })
