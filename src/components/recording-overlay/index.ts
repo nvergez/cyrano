@@ -1,4 +1,5 @@
 export { RecordingOverlay } from './RecordingOverlay'
 export { RecordingIndicator } from './RecordingIndicator'
 export { ErrorIndicator } from './ErrorIndicator'
+export { TranscribingIndicator } from './TranscribingIndicator'
 export { default as RecordingOverlayApp } from './RecordingOverlayApp'

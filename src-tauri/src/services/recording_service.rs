@@ -57,6 +57,18 @@ fn recording_context() -> &'static Mutex<Option<RecordingContext>> {
     RECORDING_CONTEXT.get_or_init(|| Mutex::new(None))
 }
 
+/// Check if a recording is currently in progress.
+///
+/// # Returns
+/// * `true` if a recording session is active
+/// * `false` if no recording is in progress
+pub fn is_recording() -> bool {
+    recording_context()
+        .lock()
+        .map(|guard| guard.is_some())
+        .unwrap_or(false)
+}
+
 /// Get the current Unix timestamp in milliseconds.
 fn get_timestamp_ms() -> u64 {
     SystemTime::now()
@@ -334,6 +346,132 @@ mod tests {
         let stored =
             recording_state::take_audio_samples().expect("take_audio_samples should succeed");
         assert_eq!(stored, samples);
+    }
+
+    #[test]
+    fn test_is_recording_returns_false_when_idle() {
+        // Ensure no recording is in progress
+        let mut ctx_guard = recording_context()
+            .lock()
+            .expect("recording context lock should succeed");
+        *ctx_guard = None;
+        drop(ctx_guard);
+
+        assert!(!is_recording());
+    }
+
+    #[test]
+    fn test_is_recording_returns_true_when_active() {
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_flag_clone = stop_flag.clone();
+
+        let handle = thread::spawn(move || {
+            while !stop_flag_clone.load(Ordering::SeqCst) {
+                thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Ok(vec![0.0_f32; 10])
+        });
+
+        let ctx = RecordingContext {
+            stop_flag: stop_flag.clone(),
+            capture_thread: Some(handle),
+            start_timestamp: 0,
+        };
+
+        *recording_context()
+            .lock()
+            .expect("recording context lock should succeed") = Some(ctx);
+
+        assert!(is_recording());
+
+        // Cleanup: stop the thread
+        stop_flag.store(true, Ordering::SeqCst);
+        let mut ctx_guard = recording_context()
+            .lock()
+            .expect("recording context lock should succeed");
+        if let Some(ctx) = ctx_guard.take() {
+            if let Some(handle) = ctx.capture_thread {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    #[test]
+    fn test_toggle_state_checks_context() {
+        // Test that is_recording() correctly reflects context state
+        // This verifies the core toggle detection mechanism
+
+        // First, clear any existing context to ensure clean state
+        {
+            let mut ctx_guard = recording_context()
+                .lock()
+                .expect("recording context lock should succeed");
+            if let Some(ctx) = ctx_guard.take() {
+                ctx.stop_flag.store(true, Ordering::SeqCst);
+                if let Some(handle) = ctx.capture_thread {
+                    let _ = handle.join();
+                }
+            }
+        }
+
+        // Verify not recording when context is empty
+        let result_before = is_recording();
+
+        // Set up a recording context
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_flag_clone = stop_flag.clone();
+
+        let handle = thread::spawn(move || {
+            while !stop_flag_clone.load(Ordering::SeqCst) {
+                thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Ok(vec![0.1_f32, 0.2_f32])
+        });
+
+        {
+            let ctx = RecordingContext {
+                stop_flag: stop_flag.clone(),
+                capture_thread: Some(handle),
+                start_timestamp: 1000,
+            };
+
+            *recording_context()
+                .lock()
+                .expect("recording context lock should succeed") = Some(ctx);
+        }
+
+        // Now should be recording
+        let result_during = is_recording();
+
+        // Clean up
+        stop_flag.store(true, Ordering::SeqCst);
+        {
+            let mut ctx_guard = recording_context()
+                .lock()
+                .expect("recording context lock should succeed");
+            if let Some(ctx) = ctx_guard.take() {
+                if let Some(handle) = ctx.capture_thread {
+                    let _ = handle.join();
+                }
+            }
+        }
+
+        // Now should not be recording
+        let result_after = is_recording();
+
+        // Assert all conditions together at the end
+        assert!(
+            !result_before,
+            "Should not be recording when context is empty"
+        );
+        assert!(
+            result_during,
+            "Should be recording when context has active thread"
+        );
+        assert!(
+            !result_after,
+            "Should not be recording after context is cleared"
+        );
     }
 
     #[test]

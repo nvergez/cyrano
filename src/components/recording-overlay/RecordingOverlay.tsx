@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger'
 import { useUIStore } from '@/store/ui-store'
 import { RecordingIndicator } from './RecordingIndicator'
 import { ErrorIndicator } from './ErrorIndicator'
+import { TranscribingIndicator } from './TranscribingIndicator'
 
 /**
  * RecordingOverlay - Main overlay component for recording state display.
@@ -41,16 +42,22 @@ export function RecordingOverlay() {
     }
   }
 
+  const renderIndicator = () => {
+    if (isError) {
+      return <ErrorIndicator error={recordingError} />
+    }
+    if (recordingState === 'transcribing') {
+      return <TranscribingIndicator />
+    }
+    return <RecordingIndicator />
+  }
+
   return (
     <div
       onClick={handleClick}
       className="flex h-screen w-screen cursor-pointer items-center justify-center rounded-xl border border-border bg-background/95 px-6 py-4 shadow-lg backdrop-blur"
     >
-      {isError ? (
-        <ErrorIndicator error={recordingError} />
-      ) : (
-        <RecordingIndicator />
-      )}
+      {renderIndicator()}
     </div>
   )
 }

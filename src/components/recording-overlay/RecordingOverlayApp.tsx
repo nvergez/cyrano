@@ -102,7 +102,42 @@ export default function RecordingOverlayApp() {
         })
       })
 
-    // Listen for recording-state-changed to update state
+    // Listen for recording-stopped to transition to transcribing state
+    listen<{ duration_ms: number; sample_count: number }>(
+      'recording-stopped',
+      event => {
+        logger.info('Recording overlay received recording-stopped event', {
+          durationMs: event.payload.duration_ms,
+          sampleCount: event.payload.sample_count,
+        })
+        const { setRecordingState } = useUIStore.getState()
+        setRecordingState('transcribing')
+      }
+    )
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-stopped listener in overlay', {
+          error,
+        })
+      })
+
+    // Listen for recording-started to reset to recording state
+    listen<{ timestamp: number }>('recording-started', event => {
+      logger.info('Recording overlay received recording-started event', {
+        timestamp: event.payload.timestamp,
+      })
+      const { setRecordingState, clearRecordingError } = useUIStore.getState()
+      clearRecordingError()
+      setRecordingState('recording')
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup recording-started listener in overlay', {
+          error,
+        })
+      })
+
+    // Listen for recording-state-changed to update state (legacy/generic)
     listen<{ state: string }>('recording-state-changed', event => {
       const { setRecordingState } = useUIStore.getState()
       setRecordingState(

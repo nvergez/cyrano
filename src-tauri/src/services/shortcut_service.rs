@@ -93,33 +93,66 @@ pub fn register_recording_shortcut(
                     log::error!("Failed to emit recording-shortcut-pressed event: {e}");
                 }
 
-                // Start recording (this will check permission and emit events)
-                // Note: Toggle behavior (stop on second press) will be added in Story 1.5
-                match crate::services::recording_service::start_recording(&app_handle_clone) {
-                    Ok(()) => {
-                        log::info!("Recording started successfully");
-                        // Show the recording overlay when recording starts
-                        if let Err(e) = crate::commands::recording_overlay::show_recording_overlay(
-                            app_handle_clone.clone(),
-                        ) {
-                            log::error!("Failed to show recording overlay: {e}");
+                // Toggle behavior: Check if recording is active, stop if so, start if not
+                if crate::services::recording_service::is_recording() {
+                    // Toggle off: stop recording
+                    match crate::services::recording_service::stop_recording(&app_handle_clone) {
+                        Ok(payload) => {
+                            log::info!(
+                                "Recording stopped: {}ms, {} samples",
+                                payload.duration_ms,
+                                payload.sample_count
+                            );
+                            // Overlay stays visible, state transitions to Transcribing
+                        }
+                        Err(e) => {
+                            log::error!("Failed to stop recording: {e}");
+                            // Emit error event for overlay to display
+                            let payload =
+                                crate::services::recording_service::RecordingFailedPayload {
+                                    error: e,
+                                };
+                            if let Err(emit_err) =
+                                app_handle_clone.emit("recording-failed", payload)
+                            {
+                                log::error!("Failed to emit recording-failed event: {emit_err}");
+                            }
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to start recording: {e}");
-                        // Show overlay first so it can receive the error event
-                        if let Err(overlay_err) =
-                            crate::commands::recording_overlay::show_recording_overlay(
-                                app_handle_clone.clone(),
-                            )
-                        {
-                            log::error!("Failed to show recording overlay: {overlay_err}");
+                } else {
+                    // Toggle on: start recording
+                    match crate::services::recording_service::start_recording(&app_handle_clone) {
+                        Ok(()) => {
+                            log::info!("Recording started successfully");
+                            // Show the recording overlay when recording starts
+                            if let Err(e) =
+                                crate::commands::recording_overlay::show_recording_overlay(
+                                    app_handle_clone.clone(),
+                                )
+                            {
+                                log::error!("Failed to show recording overlay: {e}");
+                            }
                         }
-                        // Now emit the recording-failed event so the overlay displays error state
-                        let payload =
-                            crate::services::recording_service::RecordingFailedPayload { error: e };
-                        if let Err(emit_err) = app_handle_clone.emit("recording-failed", payload) {
-                            log::error!("Failed to emit recording-failed event: {emit_err}");
+                        Err(e) => {
+                            log::error!("Failed to start recording: {e}");
+                            // Show overlay first so it can receive the error event
+                            if let Err(overlay_err) =
+                                crate::commands::recording_overlay::show_recording_overlay(
+                                    app_handle_clone.clone(),
+                                )
+                            {
+                                log::error!("Failed to show recording overlay: {overlay_err}");
+                            }
+                            // Now emit the recording-failed event so the overlay displays error state
+                            let payload =
+                                crate::services::recording_service::RecordingFailedPayload {
+                                    error: e,
+                                };
+                            if let Err(emit_err) =
+                                app_handle_clone.emit("recording-failed", payload)
+                            {
+                                log::error!("Failed to emit recording-failed event: {emit_err}");
+                            }
                         }
                     }
                 }
