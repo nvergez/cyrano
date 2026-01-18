@@ -1,9 +1,11 @@
-//! Tauri commands for model management.
+//! Tauri commands for transcription and model management.
 //!
-//! Thin command handlers that delegate to transcription_service.
+//! Thin command handlers that delegate to transcription_service and output_service.
 
 use crate::domain::CyranoError;
-use crate::services::transcription_service::{self, ModelStatus};
+use crate::services::transcription_service::ModelStatus;
+use crate::services::{output_service, transcription_service};
+use tauri::AppHandle;
 
 /// Check the current model status.
 ///
@@ -60,6 +62,25 @@ pub fn open_model_directory() -> Result<(), CyranoError> {
 pub fn cancel_transcription() {
     log::info!("cancel_transcription command called");
     transcription_service::request_cancellation();
+}
+
+/// Copy text to the system clipboard.
+///
+/// This command allows the frontend to manually copy text to the clipboard,
+/// enabling features like re-copying from history or copying edited text.
+///
+/// # Arguments
+/// * `text` - The text to copy to clipboard
+/// * `app` - The Tauri app handle (injected by Tauri)
+///
+/// # Returns
+/// * `Ok(())` if clipboard copy succeeded
+/// * `Err(CyranoError::ClipboardFailed)` if clipboard operation failed
+#[tauri::command]
+#[specta::specta]
+pub fn copy_to_clipboard(text: String, app: AppHandle) -> Result<(), CyranoError> {
+    log::debug!("copy_to_clipboard command called with {} chars", text.len());
+    output_service::copy_to_clipboard(&text, &app)
 }
 
 #[cfg(test)]

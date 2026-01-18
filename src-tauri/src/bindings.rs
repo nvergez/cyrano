@@ -35,6 +35,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         transcription::get_model_directory,
         transcription::open_model_directory,
         transcription::cancel_transcription,
+        transcription::copy_to_clipboard,
     ])
 }
 

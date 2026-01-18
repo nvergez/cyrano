@@ -71,6 +71,9 @@ mod tests {
 
     #[test]
     fn test_audio_buffer_set_and_take() {
+        // Clear any existing buffer from other tests
+        let _ = clear_audio_buffer();
+
         let samples = vec![0.1_f32, 0.2_f32, 0.3_f32];
         set_audio_samples(&samples).expect("set_audio_samples should succeed");
         let taken = take_audio_samples().expect("take_audio_samples should succeed");

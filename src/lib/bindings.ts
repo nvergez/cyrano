@@ -348,6 +348,28 @@ async openModelDirectory() : Promise<Result<null, CyranoError>> {
  */
 async cancelTranscription() : Promise<void> {
     await TAURI_INVOKE("cancel_transcription");
+},
+/**
+ * Copy text to the system clipboard.
+ * 
+ * This command allows the frontend to manually copy text to the clipboard,
+ * enabling features like re-copying from history or copying edited text.
+ * 
+ * # Arguments
+ * * `text` - The text to copy to clipboard
+ * * `app` - The Tauri app handle (injected by Tauri)
+ * 
+ * # Returns
+ * * `Ok(())` if clipboard copy succeeded
+ * * `Err(CyranoError::ClipboardFailed)` if clipboard operation failed
+ */
+async copyToClipboard(text: string) : Promise<Result<null, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("copy_to_clipboard", { text }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -404,7 +426,11 @@ export type CyranoError =
 /**
  * Audio recording failed.
  */
-{ RecordingFailed: { reason: string } }
+{ RecordingFailed: { reason: string } } | 
+/**
+ * Clipboard operation failed.
+ */
+{ ClipboardFailed: { reason: string } }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * Model status information for the frontend.

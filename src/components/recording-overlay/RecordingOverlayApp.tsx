@@ -238,6 +238,28 @@ export default function RecordingOverlayApp() {
         )
       })
 
+    // Listen for clipboard-copied event (informational)
+    listen<{ text_length: number }>('clipboard-copied', event => {
+      logger.info('Text copied to clipboard', {
+        textLength: event.payload.text_length,
+      })
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup clipboard-copied listener', { error })
+      })
+
+    // Listen for clipboard-failed event (non-fatal, log only)
+    listen<{ error: CyranoError }>('clipboard-failed', event => {
+      logger.warn('Clipboard copy failed (transcription still available)', {
+        error: event.payload.error,
+      })
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error('Failed to setup clipboard-failed listener', { error })
+      })
+
     return () => {
       unlisteners.forEach(unlisten => unlisten())
     }

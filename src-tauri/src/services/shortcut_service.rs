@@ -154,6 +154,32 @@ pub fn register_recording_shortcut(
                                                     text.len(),
                                                     duration_ms
                                                 );
+
+                                                // Copy to clipboard (FR12) - do this BEFORE emitting success event
+                                                match crate::services::output_service::copy_to_clipboard(&text, &app_for_model) {
+                                                    Ok(()) => {
+                                                        log::debug!("Clipboard copy succeeded");
+                                                        // Emit clipboard-copied event for UI feedback
+                                                        let _ = app_for_model.emit(
+                                                            "clipboard-copied",
+                                                            crate::services::recording_service::ClipboardCopiedPayload {
+                                                                text_length: text.len() as u32,
+                                                            },
+                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        // Clipboard failure is non-fatal - log and continue
+                                                        // User still gets the transcription, just needs to manually copy
+                                                        log::warn!("Clipboard copy failed: {e}");
+                                                        let _ = app_for_model.emit(
+                                                            "clipboard-failed",
+                                                            crate::services::recording_service::ClipboardFailedPayload {
+                                                                error: e,
+                                                            },
+                                                        );
+                                                    }
+                                                }
+
                                                 crate::services::recording_state::set_recording_state(
                                                     crate::domain::RecordingState::Done,
                                                 );

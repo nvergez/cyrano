@@ -26,6 +26,10 @@ pub enum CyranoError {
     /// Audio recording failed.
     #[error("Recording failed: {reason}")]
     RecordingFailed { reason: String },
+
+    /// Clipboard operation failed.
+    #[error("Clipboard operation failed: {reason}")]
+    ClipboardFailed { reason: String },
 }
 
 #[cfg(test)]
@@ -71,6 +75,14 @@ mod tests {
             reason: "device disconnected".to_string(),
         };
         assert_eq!(err.to_string(), "Recording failed: device disconnected");
+    }
+
+    #[test]
+    fn test_clipboard_failed_message() {
+        let err = CyranoError::ClipboardFailed {
+            reason: "access denied".to_string(),
+        };
+        assert_eq!(err.to_string(), "Clipboard operation failed: access denied");
     }
 
     #[test]
