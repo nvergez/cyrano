@@ -47,6 +47,21 @@ pub fn open_model_directory() -> Result<(), CyranoError> {
     Ok(())
 }
 
+/// Request cancellation of ongoing transcription.
+///
+/// This sets a flag that will abort transcription before it starts or
+/// at the earliest opportunity. Note that once whisper processing begins,
+/// it will complete before checking the flag.
+///
+/// # Returns
+/// * Always returns Ok(()) - cancellation request is always accepted
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_transcription() {
+    log::info!("cancel_transcription command called");
+    transcription_service::request_cancellation();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -20,6 +20,8 @@ interface UIState {
   recordingOverlayVisible: boolean
   recordingState: RecordingState
   recordingError: CyranoError | null
+  /** Transcribed text result for clipboard operations (Story 2.3) */
+  transcriptionResult: string | null
 
   toggleLeftSidebar: () => void
   setLeftSidebarVisible: (visible: boolean) => void
@@ -34,6 +36,8 @@ interface UIState {
   setRecordingState: (state: RecordingState) => void
   setRecordingError: (error: CyranoError | null) => void
   clearRecordingError: () => void
+  setTranscriptionResult: (result: string | null) => void
+  clearTranscriptionResult: () => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -47,6 +51,7 @@ export const useUIStore = create<UIState>()(
       recordingOverlayVisible: false,
       recordingState: 'idle' as RecordingState,
       recordingError: null,
+      transcriptionResult: null,
 
       toggleLeftSidebar: () =>
         set(
@@ -118,6 +123,20 @@ export const useUIStore = create<UIState>()(
 
       clearRecordingError: () =>
         set({ recordingError: null }, undefined, 'clearRecordingError'),
+
+      setTranscriptionResult: result =>
+        set(
+          { transcriptionResult: result },
+          undefined,
+          'setTranscriptionResult'
+        ),
+
+      clearTranscriptionResult: () =>
+        set(
+          { transcriptionResult: null },
+          undefined,
+          'clearTranscriptionResult'
+        ),
     }),
     {
       name: 'ui-store',

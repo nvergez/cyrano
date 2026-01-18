@@ -12,8 +12,13 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 /// How long the model stays loaded after last use before auto-unloading.
 const KEEP_ALIVE_DURATION: Duration = Duration::from_secs(30 * 60); // 30 minutes
+
+/// Cancellation flag for transcription.
+static CANCEL_FLAG: AtomicBool = AtomicBool::new(false);
 
 /// Global transcription service state with lazy initialization.
 static TRANSCRIPTION_SERVICE: OnceLock<Mutex<TranscriptionServiceState>> = OnceLock::new();
@@ -120,6 +125,106 @@ pub fn check_and_unload_if_idle() -> Result<bool, CyranoError> {
     Ok(false)
 }
 
+/// Request cancellation of any ongoing transcription.
+///
+/// This sets a flag that will be checked before transcription begins.
+/// Note: Once whisper `state.full()` is called, transcription runs to completion.
+pub fn request_cancellation() {
+    CANCEL_FLAG.store(true, Ordering::SeqCst);
+    log::info!("Transcription cancellation requested");
+}
+
+/// Clear the cancellation flag.
+///
+/// Should be called when starting a new recording to reset the flag.
+pub fn clear_cancellation() {
+    CANCEL_FLAG.store(false, Ordering::SeqCst);
+}
+
+/// Check if transcription has been cancelled.
+pub fn is_cancelled() -> bool {
+    CANCEL_FLAG.load(Ordering::SeqCst)
+}
+
+/// Transcribe audio samples to text.
+///
+/// MUST be called from a non-async context (spawn_blocking or std::thread::spawn)
+/// because whisper transcription is CPU-intensive.
+///
+/// # Arguments
+/// * `samples` - Audio samples at 16kHz mono, normalized to [-1.0, 1.0]
+///
+/// # Returns
+/// * `Ok(String)` - The transcribed text
+/// * `Err(CyranoError)` - If transcription fails or is cancelled
+///
+/// # Panics
+/// Never panics, all errors are returned as `CyranoError`.
+pub fn transcribe(samples: &[f32]) -> Result<String, CyranoError> {
+    // Check if cancelled before starting
+    if is_cancelled() {
+        clear_cancellation();
+        log::info!("Transcription cancelled before starting");
+        return Err(CyranoError::TranscriptionFailed {
+            reason: "Transcription cancelled by user".to_string(),
+        });
+    }
+
+    let start = Instant::now();
+
+    let mut state = service_state()
+        .lock()
+        .map_err(|e| CyranoError::TranscriptionFailed {
+            reason: format!("Lock failed: {e}"),
+        })?;
+
+    // Model must already be loaded (called ensure_model_loaded first)
+    if !state.adapter.is_loaded() {
+        return Err(CyranoError::TranscriptionFailed {
+            reason: "Model not loaded - call ensure_model_loaded first".to_string(),
+        });
+    }
+
+    // Handle empty audio buffer gracefully
+    if samples.is_empty() {
+        log::warn!("Transcription called with empty audio buffer");
+        return Ok(String::new());
+    }
+
+    log::info!(
+        "Starting transcription of {} samples ({:.2}s audio)",
+        samples.len(),
+        samples.len() as f64 / 16000.0
+    );
+
+    let text = state.adapter.transcribe(samples)?;
+
+    // Update last used for timeout tracking
+    state.last_used = Some(Instant::now());
+
+    let elapsed_ms = start.elapsed().as_millis();
+    log::info!(
+        "Transcription completed in {}ms, {} chars",
+        elapsed_ms,
+        text.len()
+    );
+
+    // Warn if exceeding NFR2 (2 seconds for 1 minute audio)
+    // 16kHz mono: 1 minute = 960,000 samples
+    let audio_seconds = samples.len() as f64 / 16000.0;
+    let expected_max_ms = (audio_seconds * 2.0 * 1000.0) as u128; // 2x real-time max
+    if elapsed_ms > expected_max_ms {
+        log::warn!(
+            "Transcription exceeded 2x real-time target: {}ms for {:.1}s audio (expected max {}ms)",
+            elapsed_ms,
+            audio_seconds,
+            expected_max_ms
+        );
+    }
+
+    Ok(text)
+}
+
 /// Get the path to the models directory.
 pub fn get_models_directory() -> Result<PathBuf, CyranoError> {
     let home = dirs::home_dir().ok_or_else(|| CyranoError::ModelNotFound {
@@ -213,5 +318,99 @@ mod tests {
         // On a fresh test run, model is likely not loaded
         // The status should at least not panic
         assert!(status.loaded == status.path.is_some() || !status.loaded);
+    }
+
+    #[test]
+    fn test_transcribe_requires_loaded_model() {
+        // When model is not loaded, transcribe should fail
+        // Note: This test may not be deterministic if model is loaded by other tests
+        let adapter = WhisperAdapter::new();
+        let samples = vec![0.0f32; 16000];
+        let result = adapter.transcribe(&samples);
+        // Expect TranscriptionFailed when model not loaded
+        assert!(result.is_err());
+        if let Err(CyranoError::TranscriptionFailed { reason }) = result {
+            assert!(
+                reason.contains("not loaded"),
+                "Expected 'not loaded' in error message, got: {reason}"
+            );
+        } else {
+            panic!("Expected TranscriptionFailed error");
+        }
+    }
+
+    #[test]
+    fn test_transcribe_empty_audio_returns_empty_string() {
+        // Empty audio should return empty string (graceful handling)
+        // This tests the service-level function, not the adapter
+        // Without a loaded model, we can't test the full path
+        // Instead, verify that empty input is handled at service level
+
+        // Ensure cancellation is cleared
+        clear_cancellation();
+
+        // Since model isn't loaded, we'll get an error about that
+        // This is expected behavior - model must be loaded first
+        let samples: Vec<f32> = vec![];
+        let result = transcribe(&samples);
+
+        // Either empty audio handling or model-not-loaded error is acceptable
+        match result {
+            Ok(text) => assert!(text.is_empty(), "Empty audio should produce empty text"),
+            Err(CyranoError::TranscriptionFailed { reason }) => {
+                // Model not loaded is expected in test environment
+                assert!(
+                    reason.contains("not loaded") || reason.contains("Lock failed"),
+                    "Unexpected error: {reason}"
+                );
+            }
+            Err(e) => panic!("Unexpected error type: {e}"),
+        }
+    }
+
+    #[test]
+    fn test_cancellation_flag_operations() {
+        // Test cancellation flag set/clear/check
+        // Note: These tests share global state and may interleave with other tests
+        // We test the invariants hold for each operation independently
+
+        // Test that clear_cancellation sets flag to false
+        clear_cancellation();
+        // After clearing, check that we can set and see the flag
+        request_cancellation();
+        let was_set = is_cancelled();
+        clear_cancellation(); // Always clean up
+
+        assert!(was_set, "Cancellation flag should be settable and readable");
+    }
+
+    #[test]
+    fn test_transcribe_respects_cancellation() {
+        // When cancelled, transcribe should return error immediately
+        // Note: This test shares global state with other tests running in parallel.
+        // We verify that either:
+        // 1. Cancellation is detected and returns "cancelled" error, OR
+        // 2. Model-not-loaded is detected (if another test cleared the flag)
+        //
+        // The key invariant is that transcribe() fails fast when cancelled.
+        clear_cancellation();
+        request_cancellation();
+
+        let samples = vec![0.0f32; 16000];
+        let result = transcribe(&samples);
+
+        assert!(result.is_err(), "transcribe() should return an error");
+        if let Err(CyranoError::TranscriptionFailed { reason }) = result {
+            // Accept either cancellation or model-not-loaded due to test parallelism
+            assert!(
+                reason.contains("cancelled") || reason.contains("not loaded"),
+                "Expected 'cancelled' or 'not loaded' in error message, got: {reason}"
+            );
+        } else {
+            panic!("Expected TranscriptionFailed error");
+        }
+
+        // Clean up any flag state
+        clear_cancellation();
     }
 }

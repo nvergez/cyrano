@@ -40,6 +40,36 @@ pub struct RecordingFailedPayload {
     pub error: CyranoError,
 }
 
+/// Payload for the transcription-started event.
+#[derive(Clone, serde::Serialize)]
+pub struct TranscriptionStartedPayload {
+    /// Unix timestamp in milliseconds when transcription started
+    pub timestamp: u64,
+}
+
+/// Payload for the transcription-complete event.
+#[derive(Clone, serde::Serialize, specta::Type)]
+pub struct TranscriptionCompletePayload {
+    /// The transcribed text
+    pub text: String,
+    /// Duration of transcription in milliseconds
+    pub duration_ms: u32,
+}
+
+/// Payload for the transcription-failed event.
+#[derive(Clone, serde::Serialize)]
+pub struct TranscriptionFailedPayload {
+    /// Error that caused transcription to fail
+    pub error: CyranoError,
+}
+
+/// Payload for the transcription-cancelled event.
+#[derive(Clone, serde::Serialize)]
+pub struct TranscriptionCancelledPayload {
+    /// Unix timestamp in milliseconds when cancellation occurred
+    pub timestamp: u64,
+}
+
 /// Global recording state - holds the audio capture thread and buffer
 struct RecordingContext {
     /// Flag to signal recording should stop

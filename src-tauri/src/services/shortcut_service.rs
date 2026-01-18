@@ -106,13 +106,94 @@ pub fn register_recording_shortcut(
                             // Overlay stays visible, state transitions to Transcribing
 
                             // Ensure model is loaded before transcription (Story 2.1)
-                            // Model loading is CPU-intensive, so run on spawn_blocking
+                            // Model loading AND transcription are CPU-intensive, so run on spawned thread
                             let app_for_model = app_handle_clone.clone();
                             std::thread::spawn(move || {
+                                // Clear any previous cancellation flag
+                                crate::services::transcription_service::clear_cancellation();
+
                                 match crate::services::transcription_service::ensure_model_loaded() {
                                     Ok(()) => {
-                                        log::info!("Whisper model ready for transcription");
-                                        // Transcription will happen in Story 2.2
+                                        log::info!("Whisper model ready, starting transcription");
+
+                                        // Emit transcription-started event
+                                        let transcription_start = get_timestamp_ms();
+                                        let _ = app_for_model.emit(
+                                            "transcription-started",
+                                            crate::services::recording_service::TranscriptionStartedPayload {
+                                                timestamp: transcription_start,
+                                            },
+                                        );
+
+                                        // Get audio samples
+                                        let samples = match crate::services::recording_state::take_audio_samples() {
+                                            Ok(s) => s,
+                                            Err(e) => {
+                                                log::error!("Failed to get audio samples: {e}");
+                                                crate::services::recording_state::set_recording_state(
+                                                    crate::domain::RecordingState::Error,
+                                                );
+                                                let _ = app_for_model.emit(
+                                                    "transcription-failed",
+                                                    crate::services::recording_service::TranscriptionFailedPayload {
+                                                        error: crate::domain::CyranoError::TranscriptionFailed {
+                                                            reason: e,
+                                                        },
+                                                    },
+                                                );
+                                                return;
+                                            }
+                                        };
+
+                                        // Perform transcription
+                                        match crate::services::transcription_service::transcribe(&samples) {
+                                            Ok(text) => {
+                                                let duration_ms = (get_timestamp_ms() - transcription_start) as u32;
+                                                log::info!(
+                                                    "Transcription complete: {} chars in {}ms",
+                                                    text.len(),
+                                                    duration_ms
+                                                );
+                                                crate::services::recording_state::set_recording_state(
+                                                    crate::domain::RecordingState::Done,
+                                                );
+                                                let _ = app_for_model.emit(
+                                                    "transcription-complete",
+                                                    crate::services::recording_service::TranscriptionCompletePayload {
+                                                        text,
+                                                        duration_ms,
+                                                    },
+                                                );
+                                            }
+                                            Err(e) => {
+                                                // Check if this was a cancellation
+                                                let is_cancellation = matches!(&e, crate::domain::CyranoError::TranscriptionFailed { reason } if reason.contains("cancelled"));
+
+                                                if is_cancellation {
+                                                    log::info!("Transcription was cancelled");
+                                                    crate::services::recording_state::set_recording_state(
+                                                        crate::domain::RecordingState::Idle,
+                                                    );
+                                                    let _ = app_for_model.emit(
+                                                        "transcription-cancelled",
+                                                        crate::services::recording_service::TranscriptionCancelledPayload {
+                                                            timestamp: get_timestamp_ms(),
+                                                        },
+                                                    );
+                                                } else {
+                                                    log::error!("Transcription failed: {e}");
+                                                    crate::services::recording_state::set_recording_state(
+                                                        crate::domain::RecordingState::Error,
+                                                    );
+                                                    let _ = app_for_model.emit(
+                                                        "transcription-failed",
+                                                        crate::services::recording_service::TranscriptionFailedPayload {
+                                                            error: e,
+                                                        },
+                                                    );
+                                                }
+                                            }
+                                        }
                                     }
                                     Err(e) => {
                                         log::error!("Model loading failed: {e}");

@@ -159,6 +159,85 @@ export default function RecordingOverlayApp() {
         )
       })
 
+    // Listen for transcription-started event
+    listen<{ timestamp: number }>('transcription-started', event => {
+      logger.info('Recording overlay received transcription-started event', {
+        timestamp: event.payload.timestamp,
+      })
+      // State is already set to transcribing by recording-stopped handler
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error(
+          'Failed to setup transcription-started listener in overlay',
+          { error }
+        )
+      })
+
+    // Listen for transcription-complete event
+    listen<{ text: string; duration_ms: number }>(
+      'transcription-complete',
+      event => {
+        logger.info('Recording overlay received transcription-complete event', {
+          textLength: event.payload.text.length,
+          durationMs: event.payload.duration_ms,
+        })
+        const { setRecordingState, setTranscriptionResult } =
+          useUIStore.getState()
+        setTranscriptionResult(event.payload.text)
+        setRecordingState('done')
+      }
+    )
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error(
+          'Failed to setup transcription-complete listener in overlay',
+          { error }
+        )
+      })
+
+    // Listen for transcription-failed event
+    listen<{ error: CyranoError }>('transcription-failed', event => {
+      logger.error('Recording overlay received transcription-failed event', {
+        error: event.payload.error,
+      })
+      const { setRecordingError } = useUIStore.getState()
+      setRecordingError(event.payload.error)
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error(
+          'Failed to setup transcription-failed listener in overlay',
+          { error }
+        )
+      })
+
+    // Listen for transcription-cancelled event
+    listen<{ timestamp: number }>('transcription-cancelled', event => {
+      logger.info('Recording overlay received transcription-cancelled event', {
+        timestamp: event.payload.timestamp,
+      })
+      const {
+        setRecordingState,
+        setRecordingOverlayVisible,
+        clearTranscriptionResult,
+      } = useUIStore.getState()
+      clearTranscriptionResult()
+      setRecordingState('idle')
+      setRecordingOverlayVisible(false)
+      // Dismiss the overlay
+      commands.dismissRecordingOverlay().catch(error => {
+        logger.error('Failed to dismiss overlay after cancellation', { error })
+      })
+    })
+      .then(unlisten => unlisteners.push(unlisten))
+      .catch(error => {
+        logger.error(
+          'Failed to setup transcription-cancelled listener in overlay',
+          { error }
+        )
+      })
+
     return () => {
       unlisteners.forEach(unlisten => unlisten())
     }

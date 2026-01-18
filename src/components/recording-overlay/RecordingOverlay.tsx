@@ -33,11 +33,29 @@ export function RecordingOverlay() {
       if (result.status === 'error') {
         logger.error('Failed to dismiss overlay', { error: result.error })
       }
-    } else {
+    } else if (recordingState === 'transcribing') {
+      // In transcribing state, cancel transcription
+      logger.info('Recording overlay clicked - cancelling transcription')
+      // Request cancellation - the backend will emit transcription-cancelled event
+      // which will trigger the cleanup in RecordingOverlayApp
+      commands.cancelTranscription()
+    } else if (recordingState === 'recording') {
+      // In recording state, cancel recording
       logger.info('Recording overlay clicked - cancelling recording')
       const result = await commands.cancelRecording()
       if (result.status === 'error') {
         logger.error('Failed to cancel recording', { error: result.error })
+      }
+    } else {
+      // In idle or done state, just dismiss
+      logger.info('Recording overlay clicked in idle/done state - dismissing')
+      const { setRecordingOverlayVisible, setRecordingState } =
+        useUIStore.getState()
+      setRecordingState('idle')
+      setRecordingOverlayVisible(false)
+      const result = await commands.dismissRecordingOverlay()
+      if (result.status === 'error') {
+        logger.error('Failed to dismiss overlay', { error: result.error })
       }
     }
   }

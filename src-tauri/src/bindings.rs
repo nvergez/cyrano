@@ -34,6 +34,7 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         transcription::check_model_status,
         transcription::get_model_directory,
         transcription::open_model_directory,
+        transcription::cancel_transcription,
     ])
 }
 

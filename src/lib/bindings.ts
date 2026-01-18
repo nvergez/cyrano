@@ -335,6 +335,19 @@ async openModelDirectory() : Promise<Result<null, CyranoError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Request cancellation of ongoing transcription.
+ * 
+ * This sets a flag that will abort transcription before it starts or
+ * at the earliest opportunity. Note that once whisper processing begins,
+ * it will complete before checking the flag.
+ * 
+ * # Returns
+ * * Always returns Ok(()) - cancellation request is always accepted
+ */
+async cancelTranscription() : Promise<void> {
+    await TAURI_INVOKE("cancel_transcription");
 }
 }
 

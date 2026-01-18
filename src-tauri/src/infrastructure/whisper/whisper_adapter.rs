@@ -62,7 +62,7 @@ impl Transcriber for WhisperAdapter {
             })?;
 
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some("en"));
+        params.set_language(None); // Auto-detect language
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
