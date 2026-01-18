@@ -6,15 +6,65 @@ interface ErrorIndicatorProps {
 }
 
 /**
+ * Extracts the error type and details from a CyranoError.
+ */
+function parseError(error: CyranoError | null): {
+  type: 'mic' | 'model-not-found' | 'model-load-failed' | 'other'
+  message: string
+  details?: string
+} {
+  if (!error) {
+    return { type: 'other', message: 'Unknown error' }
+  }
+
+  if (error === 'MicAccessDenied') {
+    return { type: 'mic', message: 'Microphone access denied' }
+  }
+
+  if (typeof error === 'object') {
+    if ('ModelNotFound' in error) {
+      return {
+        type: 'model-not-found',
+        message: 'Model not found',
+        details: error.ModelNotFound.path,
+      }
+    }
+    if ('ModelLoadFailed' in error) {
+      return {
+        type: 'model-load-failed',
+        message: 'Failed to load model',
+        details: error.ModelLoadFailed.reason,
+      }
+    }
+    if ('RecordingFailed' in error) {
+      return {
+        type: 'other',
+        message: 'Recording failed',
+        details: error.RecordingFailed.reason,
+      }
+    }
+    if ('TranscriptionFailed' in error) {
+      return {
+        type: 'other',
+        message: 'Transcription failed',
+        details: error.TranscriptionFailed.reason,
+      }
+    }
+  }
+
+  return { type: 'other', message: 'Recording failed' }
+}
+
+/**
  * ErrorIndicator - Visual indicator for recording error state.
  *
  * Displays a red cross icon with error message and provides
- * a link to open System Preferences when microphone access is denied.
+ * actionable links to resolve the error (e.g., open settings or model directory).
  */
 export function ErrorIndicator({ error }: ErrorIndicatorProps) {
-  const isMicDenied = error === 'MicAccessDenied'
+  const { type, message, details } = parseError(error)
 
-  const handleOpenSettings = async () => {
+  const handleOpenMicSettings = async () => {
     logger.info('User clicked to open microphone settings')
     const result = await commands.openMicrophoneSettings()
     if (result.status === 'error') {
@@ -24,9 +74,15 @@ export function ErrorIndicator({ error }: ErrorIndicatorProps) {
     }
   }
 
-  const errorMessage = isMicDenied
-    ? 'Microphone access denied'
-    : 'Recording failed'
+  const handleOpenModelDirectory = async () => {
+    logger.info('User clicked to open model directory')
+    const result = await commands.openModelDirectory()
+    if (result.status === 'error') {
+      logger.error('Failed to open model directory', {
+        error: result.error,
+      })
+    }
+  }
 
   return (
     <div className="flex items-center gap-3">
@@ -48,17 +104,34 @@ export function ErrorIndicator({ error }: ErrorIndicatorProps) {
         </svg>
       </div>
 
-      {/* Error message and settings link */}
+      {/* Error message and action link */}
       <div className="flex flex-col">
-        <span className="text-sm font-medium text-destructive">
-          {errorMessage}
-        </span>
-        {isMicDenied && (
+        <span className="text-sm font-medium text-destructive">{message}</span>
+
+        {/* Details if available (model path or error reason) */}
+        {details && type !== 'mic' && (
+          <span className="max-w-[200px] truncate text-xs text-muted-foreground">
+            {details}
+          </span>
+        )}
+
+        {/* Microphone access denied - link to system settings */}
+        {type === 'mic' && (
           <button
-            onClick={handleOpenSettings}
+            onClick={handleOpenMicSettings}
             className="text-left text-xs text-muted-foreground underline hover:text-foreground"
           >
             Open System Preferences
+          </button>
+        )}
+
+        {/* Model not found or load failed - link to open model directory */}
+        {(type === 'model-not-found' || type === 'model-load-failed') && (
+          <button
+            onClick={handleOpenModelDirectory}
+            className="text-left text-xs text-muted-foreground underline hover:text-foreground"
+          >
+            Open Model Directory
           </button>
         )}
       </div>

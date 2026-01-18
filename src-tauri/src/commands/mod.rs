@@ -9,3 +9,4 @@ pub mod quick_pane;
 pub mod recording;
 pub mod recording_overlay;
 pub mod recovery;
+pub mod transcription;

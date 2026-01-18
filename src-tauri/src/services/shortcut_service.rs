@@ -104,6 +104,36 @@ pub fn register_recording_shortcut(
                                 payload.sample_count
                             );
                             // Overlay stays visible, state transitions to Transcribing
+
+                            // Ensure model is loaded before transcription (Story 2.1)
+                            // Model loading is CPU-intensive, so run on spawn_blocking
+                            let app_for_model = app_handle_clone.clone();
+                            std::thread::spawn(move || {
+                                match crate::services::transcription_service::ensure_model_loaded() {
+                                    Ok(()) => {
+                                        log::info!("Whisper model ready for transcription");
+                                        // Transcription will happen in Story 2.2
+                                    }
+                                    Err(e) => {
+                                        log::error!("Model loading failed: {e}");
+                                        // Set state to Error and emit recording-failed event
+                                        crate::services::recording_state::set_recording_state(
+                                            crate::domain::RecordingState::Error,
+                                        );
+                                        let payload =
+                                            crate::services::recording_service::RecordingFailedPayload {
+                                                error: e,
+                                            };
+                                        if let Err(emit_err) =
+                                            app_for_model.emit("recording-failed", payload)
+                                        {
+                                            log::error!(
+                                                "Failed to emit recording-failed event: {emit_err}"
+                                            );
+                                        }
+                                    }
+                                }
+                            });
                         }
                         Err(e) => {
                             log::error!("Failed to stop recording: {e}");

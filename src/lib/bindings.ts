@@ -303,6 +303,38 @@ async openMicrophoneSettings() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Check the current model status.
+ * 
+ * Returns whether the model is loaded and its path if available.
+ */
+async checkModelStatus() : Promise<ModelStatus> {
+    return await TAURI_INVOKE("check_model_status");
+},
+/**
+ * Get the expected model directory path.
+ * 
+ * Returns the path where the model should be located (~/.cyrano/models/).
+ */
+async getModelDirectory() : Promise<Result<string, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_model_directory") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Open the model directory in Finder.
+ */
+async openModelDirectory() : Promise<Result<null, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_model_directory") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -361,6 +393,10 @@ export type CyranoError =
  */
 { RecordingFailed: { reason: string } }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+/**
+ * Model status information for the frontend.
+ */
+export type ModelStatus = { loaded: boolean; path: string | null }
 /**
  * Represents the microphone permission status on macOS.
  */

@@ -39,6 +39,10 @@ thiserror = "2"
 # Audio capture for recording
 cpal = "0.15"
 
+# Speech-to-text with Whisper
+whisper-rs = { version = "0.13", features = ["metal"] }
+dirs = "5"  # For cross-platform home directory resolution
+
 # Type-safe Tauri command bindings
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde_json"] }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["typescript"] }

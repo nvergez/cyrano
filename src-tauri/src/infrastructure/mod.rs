@@ -6,3 +6,4 @@
 //! - macOS accessibility APIs
 
 pub mod audio;
+pub mod whisper;

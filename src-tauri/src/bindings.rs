@@ -3,6 +3,7 @@ use tauri_specta::{collect_commands, Builder};
 pub fn generate_bindings() -> Builder<tauri::Wry> {
     use crate::commands::{
         notifications, preferences, quick_pane, recording, recording_overlay, recovery,
+        transcription,
     };
 
     Builder::<tauri::Wry>::new().commands(collect_commands![
@@ -30,6 +31,9 @@ pub fn generate_bindings() -> Builder<tauri::Wry> {
         recording_overlay::toggle_recording_overlay,
         recording_overlay::cancel_recording,
         recording_overlay::open_microphone_settings,
+        transcription::check_model_status,
+        transcription::get_model_directory,
+        transcription::open_model_directory,
     ])
 }
 
