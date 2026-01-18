@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { RecordingOverlay } from './RecordingOverlay'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act } from '@testing-library/react'
+import {
+  RecordingOverlay,
+  AUTO_DISMISS_SUCCESS_MS,
+  AUTO_DISMISS_ERROR_MS,
+} from './RecordingOverlay'
 import { useUIStore } from '@/store/ui-store'
 
 // Mock the Tauri bindings
@@ -13,6 +17,7 @@ vi.mock('@/lib/tauri-bindings', () => ({
     openMicrophoneSettings: vi
       .fn()
       .mockResolvedValue({ status: 'ok', data: null }),
+    cancelTranscription: vi.fn(),
   },
 }))
 
@@ -103,5 +108,155 @@ describe('RecordingOverlay', () => {
     fireEvent.click(overlay)
 
     expect(commands.dismissRecordingOverlay).toHaveBeenCalled()
+  })
+
+  describe('auto-dismiss behavior', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('exports auto-dismiss delay constants', () => {
+      expect(AUTO_DISMISS_SUCCESS_MS).toBe(1200)
+      expect(AUTO_DISMISS_ERROR_MS).toBe(1800)
+    })
+
+    it('auto-dismisses after success state delay', async () => {
+      const { commands } = await import('@/lib/tauri-bindings')
+      useUIStore.setState({ recordingState: 'done', recordingError: null })
+      render(<RecordingOverlay />)
+
+      // Should not have dismissed immediately
+      expect(commands.dismissRecordingOverlay).not.toHaveBeenCalled()
+
+      // Fast-forward time past the success dismiss delay
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_SUCCESS_MS)
+      })
+
+      // Verify dismiss was called
+      expect(commands.dismissRecordingOverlay).toHaveBeenCalled()
+    })
+
+    it('auto-dismisses after error state with longer delay', async () => {
+      const { commands } = await import('@/lib/tauri-bindings')
+      useUIStore.setState({
+        recordingState: 'error',
+        recordingError: 'MicAccessDenied',
+      })
+      render(<RecordingOverlay />)
+
+      // Should NOT have dismissed after success delay
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_SUCCESS_MS)
+      })
+      expect(commands.dismissRecordingOverlay).not.toHaveBeenCalled()
+
+      // Should dismiss after error delay
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_ERROR_MS - AUTO_DISMISS_SUCCESS_MS)
+      })
+      expect(commands.dismissRecordingOverlay).toHaveBeenCalled()
+    })
+
+    it('clicking cancels auto-dismiss timer and prevents double dismiss', async () => {
+      const { commands } = await import('@/lib/tauri-bindings')
+      useUIStore.setState({ recordingState: 'done', recordingError: null })
+      const { container } = render(<RecordingOverlay />)
+
+      // Click before timer fires
+      const overlay = container.firstChild as HTMLElement
+      await act(async () => {
+        fireEvent.click(overlay)
+      })
+
+      // Should have been called once from click
+      expect(commands.dismissRecordingOverlay).toHaveBeenCalledTimes(1)
+
+      // Advance past timer - should not trigger second dismiss
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_SUCCESS_MS + 1000)
+      })
+
+      // Should still only have been called once (from click)
+      expect(commands.dismissRecordingOverlay).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleans up timer on unmount', async () => {
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+
+      useUIStore.setState({ recordingState: 'done', recordingError: null })
+      const { unmount } = render(<RecordingOverlay />)
+
+      unmount()
+
+      // Verify clearTimeout was called during cleanup
+      expect(clearTimeoutSpy).toHaveBeenCalled()
+      clearTimeoutSpy.mockRestore()
+    })
+
+    it('does not auto-dismiss during recording state', async () => {
+      const { commands } = await import('@/lib/tauri-bindings')
+      useUIStore.setState({ recordingState: 'recording', recordingError: null })
+      render(<RecordingOverlay />)
+
+      // Advance past both delays
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_ERROR_MS + 1000)
+      })
+
+      // Should not have auto-dismissed
+      expect(commands.dismissRecordingOverlay).not.toHaveBeenCalled()
+    })
+
+    it('does not auto-dismiss during transcribing state', async () => {
+      const { commands } = await import('@/lib/tauri-bindings')
+      useUIStore.setState({
+        recordingState: 'transcribing',
+        recordingError: null,
+      })
+      render(<RecordingOverlay />)
+
+      // Advance past both delays
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_ERROR_MS + 1000)
+      })
+
+      // Should not have auto-dismissed
+      expect(commands.dismissRecordingOverlay).not.toHaveBeenCalled()
+    })
+
+    it('resets state to idle after auto-dismiss', async () => {
+      useUIStore.setState({ recordingState: 'done', recordingError: null })
+      render(<RecordingOverlay />)
+
+      // Fast-forward time past the success dismiss delay
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_SUCCESS_MS)
+      })
+
+      // Verify state was reset
+      expect(useUIStore.getState().recordingState).toBe('idle')
+    })
+
+    it('clears error after auto-dismiss from error state', async () => {
+      useUIStore.setState({
+        recordingState: 'error',
+        recordingError: 'MicAccessDenied',
+      })
+      render(<RecordingOverlay />)
+
+      // Fast-forward time past the error dismiss delay
+      await act(async () => {
+        vi.advanceTimersByTime(AUTO_DISMISS_ERROR_MS)
+      })
+
+      // Verify error was cleared
+      expect(useUIStore.getState().recordingError).toBeNull()
+      expect(useUIStore.getState().recordingState).toBe('idle')
+    })
   })
 })
