@@ -235,6 +235,60 @@ async requestMicrophonePermission() : Promise<Result<boolean, CyranoError>> {
 }
 },
 /**
+ * Checks the current accessibility permission status.
+ * 
+ * On macOS, accessibility permission is required for cursor insertion.
+ * Without this permission, the app falls back to clipboard-only output.
+ * 
+ * # Returns
+ * * `PermissionStatus::Granted` if accessibility permission is granted
+ * * `PermissionStatus::NotDetermined` if permission has not been granted
+ * * `PermissionStatus::Denied` (non-macOS only)
+ */
+async checkAccessibilityPermission() : Promise<PermissionStatus> {
+    return await TAURI_INVOKE("check_accessibility_permission");
+},
+/**
+ * Requests accessibility permission from the user.
+ * 
+ * On macOS, this triggers the system accessibility prompt directing the user
+ * to System Preferences > Privacy & Security > Accessibility.
+ * 
+ * # Returns
+ * * `Ok(true)` if permission is granted
+ * * `Ok(false)` if permission is not granted (graceful degradation)
+ * 
+ * # Note
+ * This function returns `Ok(false)` instead of an error when permission is
+ * denied, supporting graceful degradation to clipboard-only output.
+ */
+async requestAccessibilityPermission() : Promise<Result<boolean, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("request_accessibility_permission") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the Accessibility preferences pane in System Preferences.
+ * 
+ * This provides a convenient way for users to grant accessibility permission
+ * by deep-linking directly to the correct settings pane.
+ * 
+ * # Returns
+ * * `Ok(())` if System Preferences was opened successfully
+ * * `Err(CyranoError::OpenSettingsFailed)` if the command failed
+ */
+async openAccessibilitySettings() : Promise<Result<null, CyranoError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_accessibility_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Shows the recording overlay window without stealing focus.
  */
 async showRecordingOverlay() : Promise<Result<null, string>> {
@@ -430,7 +484,11 @@ export type CyranoError =
 /**
  * Clipboard operation failed.
  */
-{ ClipboardFailed: { reason: string } }
+{ ClipboardFailed: { reason: string } } | 
+/**
+ * Failed to open system settings.
+ */
+{ OpenSettingsFailed: { reason: string } }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * Model status information for the frontend.

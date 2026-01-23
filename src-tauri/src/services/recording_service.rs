@@ -354,6 +354,7 @@ fn run_audio_capture(stop_flag: Arc<AtomicBool>) -> Result<Vec<f32>, CyranoError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_get_timestamp_ms_returns_reasonable_value() {
@@ -384,6 +385,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_store_audio_samples_writes_to_buffer() {
         let samples = vec![0.1_f32, 0.2_f32, 0.3_f32];
         store_audio_samples(&samples).expect("store_audio_samples should succeed");
@@ -393,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_is_recording_returns_false_when_idle() {
         // Ensure no recording is in progress
         let mut ctx_guard = recording_context()
@@ -405,6 +408,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_is_recording_returns_true_when_active() {
         let stop_flag = Arc::new(AtomicBool::new(false));
         let stop_flag_clone = stop_flag.clone();
@@ -441,6 +445,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_toggle_state_checks_context() {
         // Test that is_recording() correctly reflects context state
         // This verifies the core toggle detection mechanism
@@ -519,6 +524,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_cancel_recording_resets_state() {
         // First, clear any existing context to ensure clean state
         {

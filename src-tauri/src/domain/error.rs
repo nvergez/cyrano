@@ -30,6 +30,10 @@ pub enum CyranoError {
     /// Clipboard operation failed.
     #[error("Clipboard operation failed: {reason}")]
     ClipboardFailed { reason: String },
+
+    /// Failed to open system settings.
+    #[error("Failed to open settings: {reason}")]
+    OpenSettingsFailed { reason: String },
 }
 
 #[cfg(test)]
@@ -83,6 +87,14 @@ mod tests {
             reason: "access denied".to_string(),
         };
         assert_eq!(err.to_string(), "Clipboard operation failed: access denied");
+    }
+
+    #[test]
+    fn test_open_settings_failed_message() {
+        let err = CyranoError::OpenSettingsFailed {
+            reason: "command failed".to_string(),
+        };
+        assert_eq!(err.to_string(), "Failed to open settings: command failed");
     }
 
     #[test]
