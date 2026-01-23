@@ -27,7 +27,6 @@ jscpd-report
 *.sw?
 
 # ai
-CLAUDE.md
 .ai/*
 cursor
 .gemini
