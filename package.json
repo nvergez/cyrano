@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "description": "macOS speech-to-text application with Whisper",
-  "author": "Nicolas",
-  "copyright": "Copyright © 2026 Nicolas. All rights reserved.",
+  "author": "nvergez",
+  "copyright": "Copyright © 2026 nvergez. All rights reserved.",
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
