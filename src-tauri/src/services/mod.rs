@@ -4,6 +4,7 @@
 //! Services depend on infrastructure adapters through traits (ports).
 
 pub mod accessibility_service;
+pub mod cursor_insertion_service;
 pub mod output_service;
 pub mod permission_service;
 pub mod recording_service;

@@ -9,6 +9,7 @@
 
 use crate::domain::{CyranoError, PermissionStatus};
 use crate::services::accessibility_service;
+use crate::services::cursor_insertion_service;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -51,7 +52,6 @@ pub fn copy_to_clipboard(text: &str, app: &AppHandle) -> Result<(), CyranoError>
 /// # Note
 /// This function never fails - it simply returns false if permission is not
 /// granted, supporting graceful degradation to clipboard-only output.
-#[allow(dead_code)] // Will be used in Story 3.2
 pub fn is_cursor_insertion_available() -> bool {
     let status = accessibility_service::check_accessibility_permission();
     let available = status == PermissionStatus::Granted;
@@ -69,7 +69,7 @@ pub fn is_cursor_insertion_available() -> bool {
 ///
 /// This function handles the output phase of transcription:
 /// 1. Always copies text to clipboard (FR12)
-/// 2. If accessibility permission granted: will insert at cursor (Story 3.2)
+/// 2. If accessibility permission granted: inserts at cursor via Cmd+V (FR13)
 /// 3. If accessibility denied: gracefully degrades to clipboard-only
 ///
 /// # Arguments
@@ -78,24 +78,32 @@ pub fn is_cursor_insertion_available() -> bool {
 ///
 /// # Returns
 /// * `Ok(true)` if both clipboard copy and cursor insertion succeeded
-/// * `Ok(false)` if only clipboard copy succeeded (accessibility denied)
+/// * `Ok(false)` if only clipboard copy succeeded (accessibility denied or insertion failed)
 /// * `Err(CyranoError::ClipboardFailed)` if clipboard copy failed
 ///
 /// # Note
 /// Clipboard copy is always attempted regardless of accessibility status.
-/// Cursor insertion failure is not treated as an error.
-#[allow(dead_code)] // Will be used in Story 3.3
+/// Cursor insertion failure is not treated as an error - graceful degradation
+/// means the text is always available in the clipboard for manual pasting.
 pub fn output_transcription(text: &str, app: &AppHandle) -> Result<bool, CyranoError> {
-    // Step 1: Always copy to clipboard first
+    // Step 1: Always copy to clipboard first (prerequisite for cursor insertion)
     copy_to_clipboard(text, app)?;
 
-    // Step 2: Check if cursor insertion is available
+    // Step 2: Attempt cursor insertion if accessibility permission is granted
     if is_cursor_insertion_available() {
-        // TODO: Story 3.2 will implement actual cursor insertion here
-        log::info!("Cursor insertion available - will be implemented in Story 3.2");
-        // For now, return true to indicate cursor insertion could be done
-        // Actual insertion will be added in Story 3.2
-        Ok(true)
+        log::info!("Attempting cursor insertion via Cmd+V simulation");
+
+        // Call cursor insertion service - it handles graceful degradation internally
+        // and always returns Ok, so we just check if it worked
+        if cursor_insertion_service::insert_at_cursor().is_ok() {
+            log::info!("Cursor insertion completed (text in clipboard and paste simulated)");
+            Ok(true)
+        } else {
+            // This branch is actually unreachable due to graceful degradation,
+            // but we handle it for completeness
+            log::warn!("Cursor insertion reported failure - text is in clipboard");
+            Ok(false)
+        }
     } else {
         // Graceful degradation: no error, just clipboard only
         log::info!("Cursor insertion not available - clipboard copy completed");

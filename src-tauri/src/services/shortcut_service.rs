@@ -155,10 +155,16 @@ pub fn register_recording_shortcut(
                                                     duration_ms
                                                 );
 
-                                                // Copy to clipboard (FR12) - do this BEFORE emitting success event
-                                                match crate::services::output_service::copy_to_clipboard(&text, &app_for_model) {
-                                                    Ok(()) => {
-                                                        log::debug!("Clipboard copy succeeded");
+                                                // Output transcription (FR12 + FR13):
+                                                // 1. Copy to clipboard (always)
+                                                // 2. Insert at cursor via Cmd+V (if accessibility granted)
+                                                match crate::services::output_service::output_transcription(&text, &app_for_model) {
+                                                    Ok(cursor_inserted) => {
+                                                        if cursor_inserted {
+                                                            log::debug!("Clipboard copy and cursor insertion succeeded");
+                                                        } else {
+                                                            log::debug!("Clipboard copy succeeded (cursor insertion not available)");
+                                                        }
                                                         // Emit clipboard-copied event for UI feedback
                                                         let _ = app_for_model.emit(
                                                             "clipboard-copied",
@@ -170,7 +176,7 @@ pub fn register_recording_shortcut(
                                                     Err(e) => {
                                                         // Clipboard failure is non-fatal - log and continue
                                                         // User still gets the transcription, just needs to manually copy
-                                                        log::warn!("Clipboard copy failed: {e}");
+                                                        log::warn!("Output failed: {e}");
                                                         let _ = app_for_model.emit(
                                                             "clipboard-failed",
                                                             crate::services::recording_service::ClipboardFailedPayload {

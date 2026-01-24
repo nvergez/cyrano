@@ -60,6 +60,7 @@ tauri-plugin-window-state = "2"
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 core-foundation = "0.10"  # For accessibility permission APIs
+core-graphics = "0.24"    # For keyboard event simulation (CGEvent)
 
 # Optimize for smaller binary size in release builds
 [profile.release]
